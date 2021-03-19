@@ -159,7 +159,6 @@ class animatedLinearParam extends animatedParam {
 
     }
 
-
 }
 
 
@@ -264,6 +263,7 @@ class MapBuilder {
     #map;
     #mapsAround;
     #elementsOrder = [];
+    #nextActionChance = null;
 
     constructor(map) {
         this.#map = map;
@@ -434,6 +434,19 @@ class MapBuilder {
         return this;
     }
 
+    chance(probability, predicate = undefined) {
+
+        if(predicate === undefined) {
+            this.#nextActionChance = probability;
+        } else {
+            if (getRandomInt(0, 100) < probability * 100) {
+                predicate(this.#map);
+            }
+        }
+        return this;
+
+    }
+
     findRoadEntries() {
         for(var direction of GameMapScreen.directions) {
             this.#map.gameMapScreenRoadEntry[direction] = [];
@@ -500,6 +513,8 @@ class GameMapScreen {
     ];
     width = 0;
     height = 0;
+
+    actors = {};
 
     get size() {
         return {x: this.width, y: this.height};
@@ -719,6 +734,10 @@ class MapManager {
 
     }
 
+    setupNPCS(map) {
+        map.actors['npc#1'] = (new MovableActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)}))).setRenderable((new RenderableCharacter()).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog());
+    }
+
     moveToAMap(direction) {
 
         let nextMapCords = this.getShiftedCords(this.currMapCoords, direction);
@@ -729,12 +748,12 @@ class MapManager {
             this.currentGameScreen = existingMap;
         } else {
             this.currentGameScreen = this.generateMapOnPosition(nextMapCords);
+            //this.setupNPCS();
             this.setMap(nextMapCords, this.currentGameScreen);
         }
         this.currMapCoords = nextMapCords;
 
     }
-
 
     screenVariations = [
         [
@@ -789,7 +808,6 @@ class MapManager {
             result = this.generateBoundries(result, source);
         }
 
-
         result.findRoadEntries();
 
         MapBuilder.make(result)
@@ -825,6 +843,8 @@ class MapManager {
 
     generateMapOnPosition(position) {
 
+        let self = this;
+
         return MapBuilder.make(GameMapScreen.makeEmptyMap(this.currentGameScreen.size, 0))
             .setMapsAround(this.getMapsAround(position))
             .copyBoundriesOnOpposites()
@@ -832,6 +852,7 @@ class MapManager {
             .connectRandomRoads(getRandomInt(1, 3))
             .addIsland(getRandomInt(5, 13))
             .connectLastTwo(getRandomInt(1, 6))
+            .chance(0.4, (x) => self.setupNPCS(x))
             .get();
 
 
@@ -1240,14 +1261,14 @@ class ResourceLoadManager {
 
 class ActorsRrenderer extends Renderer {
 
-    actors;
+    actorsGetter;
 
     resourceLoadManager;
 
     constructor(canvas, resourceLoadManager, actors) {
         super(canvas);
         this.resourceLoadManager = resourceLoadManager;
-        this.actors = actors;
+        this.actorsGetter = actors;
     }
 
     render(time) {
@@ -1258,8 +1279,10 @@ class ActorsRrenderer extends Renderer {
 
         let scaleCoeff = 0.8;
 
-        for(let actorName in this.actors) {
-            let actorsRenderable = this.actors[actorName].renderable;
+        let actors = this.actorsGetter();
+
+        for(let actorName in actors) {
+            let actorsRenderable = actors[actorName].renderable;
             if(actorsRenderable) {
                 actorsRenderable.draw(time, this);
             }
@@ -1690,6 +1713,17 @@ class Game {
     uiBblock;
     actorsRenderer;
 
+    lastFullActors = {};
+
+    getFullActorsList()  {
+        let result = {};
+        if(this?.mapManager?.currentGameScreen?.actors) {
+            result = Object.assign(result, this.mapManager.currentGameScreen.actors);
+        }
+
+        return Object.assign(result, this.actors);
+    }
+
     teleportCooldown;
 
     addRenderer(renderer) {
@@ -1702,7 +1736,7 @@ class Game {
     }
 
     findClosestActorsDialogs() {
-        return game.actors.filter(x => x.dialog && distanceXY(x.getPos(), game.player.getPos()) < 20);
+        return Object.values(this.lastFullActors).filter(x => x.dialog && distanceXY(x.getPos(), game.player.getPos()) < 20);
     }
 
     getDefaultUIOptions() {
@@ -1743,6 +1777,20 @@ class Game {
 
     removeActor(name) {
         delete this.actors[name];
+    }
+
+    initActor(actor) {
+        actor.bindActorRenderer(this.actorsRenderer);
+
+        if(actor instanceof MovableActor) {
+            actor.keyboard = this.keyboard;
+            actor.mapManager = this.mapManager;
+            if(actor.renderable) {
+                actor.renderable.init(this.actorsRenderer);
+            }
+
+        }
+
     }
 
     addActor(name, actor) {
@@ -1841,9 +1889,15 @@ class Game {
             this.markPortalsAsInteractables();
             this.player.setPos(this.toMapSpace(this.findOpositePoint(tpDirs[0][0], teleportPoint)));
             this.background.resetMapData(this.mapManager.currentGameScreen);
+            this.initializeMapActors(this.mapManager.currentGameScreen);
 
 
         }
+    }
+
+    initializeMapActors(map) {
+        let self = this;
+        Object.values(map.actors).forEach(x => self.initActor(x));
     }
 
 
@@ -1858,6 +1912,9 @@ class Game {
     }
 
     frame(delta) {
+
+        this.lastFullActors = this.getFullActorsList();
+
         this.teleportCooldown.animate(delta);
     }
 
@@ -1869,11 +1926,11 @@ class Game {
     }
 
     setupRenderers() {
+        let self = this;
         this.actorsRenderer = new ActorsRrenderer(
             document.getElementById("characterCanvas"),
             this.resourceLoadManager,
-            this.actors
-            );
+            function () {return self.getFullActorsList();});
     }
 
     main() {
@@ -1895,7 +1952,6 @@ class Game {
 
         this.player = new Player(this.toMapSpace(this.selectSpawnPoint()));
         this.addActor('player', this.player);
-        this.addActor('npc#1', (new MovableActor(this.toMapSpace({x:16, y:16}))).setRenderable((new RenderableCharacter()).setStopAtFrame(1).setVariation(4)).setDialog(new Dialog()));
 
         this.markPortalsAsInteractables();
 
