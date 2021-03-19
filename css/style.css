@@ -1,0 +1,10 @@
+#viewport {
+    position: relative;
+}
+#viewport canvas {
+    position: absolute;
+}
+@font-face {
+    font-family: 'arcadeclassic';
+    src: url('../fonts/ARCADECLASSIC.TTF');
+}
