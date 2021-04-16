@@ -43,6 +43,10 @@ function shuffle(array) {
     return array;
 }
 
+function angleFromVec(vec) {
+    return (vec.x < 0) * 180 + vec.y * 90 + (45 + 180 * (vec.x < 0)) * -vec.y * vec.x;
+}
+
 function getPointsOnLine(start, end) {
     var dx = Math.abs(end.x - start.x);
     var dy = Math.abs(end.y - start.y);
