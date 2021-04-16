@@ -12,6 +12,7 @@ class Keyboard {
             moveRight: ['ArrowRight', 'KeyD'],
             moveLeft: ['ArrowLeft', 'KeyA'],
             interact: ['Space'],
+            attack: ['KeyQ'],
         },
         menu: {
             selectUp: ['ArrowUp', 'KeyW'],
@@ -66,8 +67,10 @@ class Keyboard {
     isCommandActive(command, state = 'game') {
         if(this.gameState === state) {
             let self = this;
-            return this.#codeToCommandTranslator[this.gameState][command].some(key => this.isKeyPreseed(key));
-
+            let callbacks = this.#codeToCommandTranslator[this.gameState][command];
+            if(callbacks !== undefined) {
+                return callbacks.some(key => this.isKeyPreseed(key));
+            }
         }
         return false;
 
@@ -88,6 +91,18 @@ class Keyboard {
         }
 
 
+    }
+
+}
+
+class Animation {
+
+    static linear(value, max, frames) {
+        return Math.floor((value % max) / (max / frames));
+    }
+
+    static linearNoRepeat(value, max, frames) {
+        return value >= max ? (frames - 1) : Math.floor((value % max) / (max / frames));
     }
 
 }
@@ -878,7 +893,6 @@ class Renderer {
         this.context = canvas.getContext("2d");
     }
 
-
     clearArea() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
@@ -1072,39 +1086,194 @@ class MapRenderer extends Renderer {
 class RenderableItem {
 
     resource;
+    requestedResource;
+    itemPos = {x:0, y:0};
 
     init(renderer) {
         this.renderer = renderer;
+        if(renderer) {
+            this.resource = renderer.resourceLoadManager.getResource(this.requestedResource);
+        }
     }
+
+    constructor(requestedResource) {
+        this.requestedResource = requestedResource;
+    }
+
     draw(time, renderer) {
 
+    }
+
+    isReadyToDraw() {
+        return !!this.resource?.isReady;
+    }
+
+    drawInContext(blockSize, blockPos, pictPos, scale = 1.0, angle = undefined) {
+
+        if(angle && angle !== 0) {
+            let shiftx = pictPos.x + (blockSize.x * scale) / 2;
+            let shifty = pictPos.y + (blockSize.y * scale) / 2;
+
+            this.renderer.context.translate(shiftx, shifty);
+            this.renderer.context.rotate(angle * (Math.PI / 180));
+            this.renderer.context.translate(-shiftx, -shifty);
+            this.renderer.context.drawImage(this.resource.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
+            this.renderer.context.setTransform(1,0,0,1,0,0)
+        } else {
+            this.renderer.context.drawImage(this.resource.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
+        }
+
+    }
+
+    setItemPos(pos) {
+        this.itemPos = pos;
+        return this;
     }
 
 
 }
 
-class RenderablePlayer extends RenderableItem {
+
+class AnimatedRenderableItem extends RenderableItem{
+    frames = [];
+    animationTime = 1000;
+    currTime = 0.0;
+    scaleCoeff = 0.8;
+    blockSize = {x:16,y:16};
+    rotation = 0;
+    requestedAnimation = Animation.linear;
+    requestedAnim = null;
+    isAnimDone = false;
+
+    init(renderer) {
+        super.init(renderer);
+        if(this.requestedAnim) {
+            this.frames = this.resource.animations[this.requestedAnim];
+            this.blockSize = this.resource.animationSizes[this.requestedAnim];
+        }
+    }
+
+    constructor(requestedResource = undefined) {
+        super(requestedResource);
+    }
+
+    getCurrFrameIndex(time) {
+
+        this.currTime += time;
+
+        if(this.currTime >= this.animationTime) {
+            this.isAnimDone = true;
+        }
+
+        return this.requestedAnimation(this.currTime, this.animationTime, this.frames.length);
+
+    }
+
+    generateFramesFromStrip(first, shift, count) {
+
+        let arr = [first];
+        for(let i = 0; i < count; i++) {
+            arr.push({x:first.x + shift * i, y:first.y});
+        }
+
+        return arr;
+
+    }
+
+    setAnimTime(animTime) {
+        this.animationTime = animTime;
+        return this;
+    }
+
+    setAnim(animName, animRule = undefined) {
+
+        this.requestedAnim = animName;
+        if(this.resource) {
+            this.frames = this.resource.animations[this.requestedAnim];
+            this.blockSize = this.resource.animationSizes[this.requestedAnim];
+        }
+
+        if(animRule) {
+            this.requestedAnimation = animRule;
+        }
+        return this;
+    }
+
+    setFramesFromStrip(first, shift, count) {
+        this.frames = this.generateFramesFromStrip(first, shift, count);
+        return this;
+    }
+
+    setBlockSize(blockSize) {
+        this.blockSize = blockSize;
+        return this;
+    }
+
+    setScale(scale) {
+        this.scaleCoeff = scale;
+        return this;
+    }
+
+    setRotation(rotation) {
+        this.rotation = rotation;
+        return this;
+    }
+
+    reset(frames = 0) {
+        this.currTime = 0;
+        this.frames = frames;
+        this.isAnimDone = false;
+    }
+
+    draw(time, renderer) {
+        if(this.frames.length) {
+            let currFrameIndex = this.getCurrFrameIndex(time);
+
+            this.drawInContext(this.blockSize, this.frames[currFrameIndex], this.itemPos, this.scaleCoeff, this.rotation);
+        }
+    }
+
+}
+
+class RenderablePlayer extends AnimatedRenderableItem {
 
     actor;
 
     blockPos = {x: 6, y:12};
     blockSize = {x:16, y:20};
 
+    framesMoveRight;
+    framesMoveLeft;
+    framesIdle;
+
     constructor(actor) {
-        super();
+        super('textures/adventurer.png');
         this.actor = actor;
+
+        this.framesMoveRight = this.generateFramesFromStrip({x:5, y:42}, 32, 8);
+        this.framesMoveLeft = this.generateFramesFromStrip({x:7, y:298}, 32, 8);
+        this.framesIdle = this.generateFramesFromStrip({x:5, y:10}, 32, 13);
+
     }
 
     init(renderer) {
         super.init(renderer);
-        this.resource = renderer.resourceLoadManager.getResource('textures/adventurer.png');
     }
 
     draw(time, renderer) {
-        if(this.resource.isReady) {
-            let scaleCoeff = 0.8;
-            renderer.context.drawImage(this.resource.get(), this.blockPos.x, this.blockPos.y, this.blockSize.x, this.blockSize.y, this.actor.x, this.actor.y, this.blockSize.x * scaleCoeff, this.blockSize.y * scaleCoeff);
+        this.itemPos = this.actor;
+
+        if(this.actor.moveDirection.x > 0) {
+            this.frames = this.framesMoveRight;
+        } else if(this.actor.moveDirection.x < 0) {
+            this.frames = this.framesMoveLeft;
+        } else if(this.actor.moveDirection.y !== 0) {
+            this.frames = this.framesMoveRight;
+        } else {
+            this.frames = this.framesIdle;
         }
+
+        super.draw(time, renderer);
     }
 
 }
@@ -1130,9 +1299,10 @@ class RenderableCharacter extends RenderableItem{
         return this;
     }
 
-    constructor(actor) {
-        super();
+    constructor(actor, resName = undefined) {
+        super(resName);
         this.actor = actor;
+        this.resName = resName;
 
         this.animTime = new animatedLinearParam(0, 3, 100, 0);
 
@@ -1140,7 +1310,6 @@ class RenderableCharacter extends RenderableItem{
 
     init(renderer) {
         super.init(renderer);
-        this.resource = renderer.resourceLoadManager.getResource('textures/characters.png');
     }
 
     draw(time, renderable) {
@@ -1220,6 +1389,15 @@ class TexturePackResource extends ManagedResource {
         this.resource.src = this.name;
     }
 
+    animations = {};
+    animationSizes = {};
+
+    addNamedFrames(name, size, frames) {
+        this.animations[name] = frames;
+        this.animationSizes[name] = size;
+        return this;
+    }
+
 }
 
 class ResourceLoadManager {
@@ -1283,7 +1461,7 @@ class ActorsRrenderer extends Renderer {
 
         for(let actorName in actors) {
             let actorsRenderable = actors[actorName].renderable;
-            if(actorsRenderable) {
+            if(actorsRenderable && actorsRenderable.isReadyToDraw()) {
                 actorsRenderable.draw(time, this);
             }
         }
@@ -1445,20 +1623,51 @@ class Actor {
     y;
 
     #actorRenderer;
+    renderable;
     dialog;
+    #game;
+
+    #shouldBeRemoved = false;
+
+    get shouldBeRemoved() {
+        return this.#shouldBeRemoved;
+    }
+
+    markForRemoval() {
+        this.#shouldBeRemoved = true;
+    }
+
 
     getPos() {
         return {x:this.x, y:this.y};
     }
 
-
     get actionRenderer() {
         return this.#actorRenderer;
     }
 
-    bindActorRenderer(actorRenderer) {
-        this.#actorRenderer = actorRenderer;
+    get game() {
+        return this.#game;
     }
+
+    init(game) {
+        this.#game = game;
+        this.#actorRenderer = game.actorsRenderer;
+        game.loop.addActor(this);
+
+        if(this.renderable) {
+            this.renderable.init(game.actorsRenderer);
+        }
+
+    }
+
+    setRenderable(renderable) {
+        renderable.actor = this;
+        this.renderable = renderable;
+        renderable.setItemPos(this);
+        return this;
+    }
+
 
     constructor(pos) {
         this.x = pos.x;
@@ -1483,7 +1692,6 @@ class Actor {
 
 class MovableActor extends Actor {
 
-    renderable;
     keyboardControllable = false;
 
     #speed = 100;
@@ -1507,9 +1715,25 @@ class MovableActor extends Actor {
         super(pos);
     }
 
-    setRenderable(renderable) {
-        renderable.actor = this;
-        this.renderable = renderable;
+    init(game) {
+        super.init(game);
+
+        this.keyboard = game.keyboard;
+        this.mapManager = game.mapManager;
+    }
+
+    setMoveDirection(moveDirection) {
+        this.moveDirection = moveDirection;
+        return this;
+    }
+
+    setSpeed(speed) {
+        this.speed = speed;
+        return this;
+    }
+
+    setNoclip(noclip) {
+        this.#noclip = noclip;
         return this;
     }
 
@@ -1555,31 +1779,133 @@ class MovableActor extends Actor {
     }
 
 
+    checkBoxCollisionVector(pos, size) {
+
+        let selfPos = this.getPos();
+
+        return selfPos.x + this.size.x > pos.x && pos.x + size.x > selfPos.x && selfPos.y + this.size.y > pos.y && pos.y + size.y > selfPos.y;
+    }
+
+
     frame(delta) {
 
-        if(this.keyboardControllable) {
-            let vector = this.getMoveVector();
-
-            let newScreenX = this.x + (vector.x * this.#speed) * (delta / 1000);
-            let newScreenY = this.y + (vector.y * this.#speed) * (delta / 1000);
-
-            if (this.checkBoxCollision(newScreenX, newScreenY) || this.#noclip) {
-                this.x = newScreenX;
-                this.y = newScreenY;
-            } else if (this.checkBoxCollision(this.x, newScreenY)) {
-                this.y = newScreenY;
-            } else if (this.checkBoxCollision(newScreenX, this.y)) {
-                this.x = newScreenX;
-            }
+        if(Math.abs(this.x) > 1000 || Math.abs(this.y) > 1000) {
+            this.markForRemoval();
         }
+
+        let vector = this.moveDirection;
+
+        if(this.keyboardControllable) {
+            vector = this.getMoveVector();
+        }
+
+        let newScreenX = this.x + (vector.x * this.#speed) * (delta / 1000);
+        let newScreenY = this.y + (vector.y * this.#speed) * (delta / 1000);
+
+        if (this.checkBoxCollision(newScreenX, newScreenY) || this.#noclip) {
+            this.x = newScreenX;
+            this.y = newScreenY;
+        } else if (this.checkBoxCollision(this.x, newScreenY)) {
+            this.y = newScreenY;
+        } else if (this.checkBoxCollision(newScreenX, this.y)) {
+            this.x = newScreenX;
+        }
+
 
         super.frame(delta);
     }
 
+}
+
+class ProjectileActor extends MovableActor{
+
+    damage = 10;
+    projectileAuthor;
+    active = true;
+
+    constructor(projectileAuthor) {
+        super(projectileAuthor.getPos());
+        this.projectileAuthor = projectileAuthor;
+        this.setMoveDirection(projectileAuthor.lookAt)
+            .setNoclip(true);
+    }
+
+    setRenderable(renderable) {
+        super.setRenderable(renderable);
+        this.renderable.setRotation(angleFromVec(this.moveDirection));
+        return this;
+    }
+
+    frame(delta) {
+        super.frame(delta);
+
+        if(this.active) {
+            for (let index in this.game.lastFullActors) {
+                let actor = this.game.lastFullActors[index];
+                if (actor !== this && actor !== this.projectileAuthor && actor.size !== undefined) {
+                    if (this.checkBoxCollisionVector(actor.getPos(), actor.size)) {
+                        if (actor instanceof BreakableActor) {
+                            actor.inflictDamage(this.damage);
+                            this.active = false;
+                            this.renderable.reset();
+                            this.setMoveDirection({x:0, y:0});
+                            this.renderable.setAnim('redStarDeath', Animation.linearNoRepeat).setAnimTime(300);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if(this.renderable.isAnimDone) {
+            this.markForRemoval();
+        }
+
+    }
+}
+
+class BreakableActor extends MovableActor {
+
+    health = 100;
+    maxHealth = 100;
+
+    setMaxHealth(maxHealth) {
+        this.maxHealth = maxHealth;
+        return this;
+    }
+
+    setHealth(health) {
+        this.health = health;
+        return this;
+    }
+
+    inflictDamage(damage) {
+        this.health -= damage;
+
+        if(this.health <= 0) {this.markForRemoval(); this.health = 0;}
+        if(this.health > this.maxHealth) {this.health = this.maxHealth;}
+        return this;
+
+    }
+
+    get health() {
+        return this.health;
+    }
+
+    constructor(pos) {
+        super(pos);
+    }
+
+    init(game) {
+        super.init(game);
+
+    }
+
+    frame(delta) {
+        super.frame(delta);
+    }
 
 }
 
-class Player extends MovableActor {
+class Player extends BreakableActor {
 
     interactCallback;
 
@@ -1590,8 +1916,25 @@ class Player extends MovableActor {
 
         this.renderable = new RenderablePlayer(this);
         this.keyboardControllable = true;
+    }
+
+    init(game) {
+        super.init(game);
+        let self = this;
+        this.interactCallback = () => {game.reactToAction(self);}
+
+        this.keyboard.onCommandActive('interact', 'game', () => self.tryInteract());
+        this.keyboard.onCommandActive('attack', 'game', () => self.tryAttack());
 
     }
+
+    tryAttack() {
+        this.game.addActorToCurrScreen(
+            (new ProjectileActor(this).setRenderable((new AnimatedRenderableItem('textures/bullets.png')).setAnim('redStarFly', Animation.linearNoRepeat).setAnimTime(500)))
+            .setSpeed(140)
+        );
+    }
+
 
     tryInteract() {
         if(this.interactCallback) {
@@ -1600,7 +1943,6 @@ class Player extends MovableActor {
     }
 
     frame(delta) {
-
         super.frame(delta);
     }
 }
@@ -1628,7 +1970,6 @@ class MainLoop {
     }
 
     constructor(updateMethod, drawMethod) {
-
         this.#updateMethods = updateMethod === undefined ? [() => {}] : [updateMethod];
         this.#drawMethods = drawMethod === undefined ? [() => {}] : [drawMethod];
     }
@@ -1643,8 +1984,8 @@ class MainLoop {
     }
 
     addActor(actor) {
-        this.#updateMethods.push(bind(actor, 'frame'));
-        this.#drawMethods.push(bind(actor.actionRenderer, 'render'));
+        //this.#updateMethods.push(bind(actor, 'frame'));
+        //this.#drawMethods.push(bind(actor.actionRenderer, 'render'));
         return this;
     }
 
@@ -1676,7 +2017,6 @@ class interactableObject {
 
 }
 
-
 class interactableTerrain_Portal extends interactableObject {
 
     interact(initiator) {
@@ -1698,7 +2038,6 @@ class interactableTerrain_Portal extends interactableObject {
 
 }
 
-
 class Game {
 
     keyboard = new Keyboard();
@@ -1707,6 +2046,7 @@ class Game {
     resourceLoadManager = new ResourceLoadManager();
 
     actors = {};
+    actorsIndex = 0;
     interactables = [];
     player;
     background;
@@ -1718,7 +2058,20 @@ class Game {
     getFullActorsList()  {
         let result = {};
         if(this?.mapManager?.currentGameScreen?.actors) {
+
+            for(let actorId in this.mapManager.currentGameScreen.actors) {
+                if(this.mapManager.currentGameScreen.actors[actorId].shouldBeRemoved) {
+                    delete this.mapManager.currentGameScreen.actors[actorId];
+                }
+            }
+
             result = Object.assign(result, this.mapManager.currentGameScreen.actors);
+        }
+
+        for(let actorId in this.actors) {
+            if(this.actors[actorId].shouldBeRemoved) {
+                delete this.actors[actorId];
+            }
         }
 
         return Object.assign(result, this.actors);
@@ -1751,6 +2104,7 @@ class Game {
         let currDialog = [
             {selected:true, text:'back to map', action: backToGameAction},
             {text:'Dig', action:() => {slf.mapManager.currentGameScreen.setTileByVector(addXY(playerCords, playerLookAt), 0); backToGameAction();}},
+            {text:'summonSollie', action:() => {slf.addActorToCurrScreen((new BreakableActor(game.player.getPos())).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog())); backToGameAction();}},
             {text:'Inventory'},
         ];
 
@@ -1780,43 +2134,33 @@ class Game {
     }
 
     initActor(actor) {
-        actor.bindActorRenderer(this.actorsRenderer);
-
-        if(actor instanceof MovableActor) {
-            actor.keyboard = this.keyboard;
-            actor.mapManager = this.mapManager;
-            if(actor.renderable) {
-                actor.renderable.init(this.actorsRenderer);
-            }
-
-        }
-
+        actor.init(this);
     }
 
     addActor(name, actor) {
 
+        if(name === undefined) {
+            name = this.actorsIndex++;
+        }
+
         this.actors[name] = actor;
-        actor.bindActorRenderer(this.actorsRenderer);
-
-        if(actor instanceof MovableActor) {
-            actor.keyboard = this.keyboard;
-            actor.mapManager = this.mapManager;
-            if(actor.renderable) {
-                actor.renderable.init(this.actorsRenderer);
-            }
-
-        }
-
-        if(actor instanceof Player) {
-            let self = this;
-            this.keyboard.onCommandActive('interact', 'game', () => actor.tryInteract());
-            actor.interactCallback = () => {self.reactToAction(actor);}
-        }
-
-
-
-        this.loop.addActor(actor);
+        actor.init(this);
         return actor;
+    }
+
+    addActorToCurrScreen(actor, name = undefined) {
+
+        if(name === undefined) {
+            name = this.actorsIndex++;
+        }
+
+        if(this?.mapManager?.currentGameScreen?.actors) {
+            this.mapManager.currentGameScreen.actors[name] = actor;
+            actor.init(this);
+            return actor;
+        }
+
+        return null;
 
     }
 
@@ -1900,7 +2244,6 @@ class Game {
         Object.values(map.actors).forEach(x => self.initActor(x));
     }
 
-
     markPortalsAsInteractables() {
 
         let portals = Object.values(game.mapManager.currentGameScreen.gameMapScreenRoadEntry).flat().map(x => x['tiles']).flat();
@@ -1915,12 +2258,21 @@ class Game {
 
         this.lastFullActors = this.getFullActorsList();
 
+        for(let actorIndex in this.lastFullActors) {
+            this.lastFullActors[actorIndex].frame(delta);
+        }
+
         this.teleportCooldown.animate(delta);
     }
 
     startLoadingResources() {
         this.resourceLoadManager.addResource(new TexturePackResource('textures/adventurer.png'));
         this.resourceLoadManager.addResource(new TexturePackResource('textures/characters.png'));
+
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/bullets.png')
+            .addNamedFrames('redStarDeath', {x:17, y:17},[{x:136, y:9}, {x:155, y:9}, {x:172, y:9}])
+            .addNamedFrames('redStarFly', {x:20, y:12},[{x:205, y:9}, {x:225, y:9}, {x:248, y:9}, {x:274, y:9}])
+        );
 
         this.resourceLoadManager.load();
     }
@@ -1956,6 +2308,7 @@ class Game {
         this.markPortalsAsInteractables();
 
         this.loop.addUpdateMethod(bind(this, 'frame'));
+        this.loop.addRenderer(this.actorsRenderer);
         this.loop.start();
 
     }
