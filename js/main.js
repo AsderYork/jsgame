@@ -1855,12 +1855,29 @@ class ProjectileActor extends MovableActor{
     projectileAuthor;
     active = true;
 
+    delayAnimTime = false;
+    delayAnim = false;
+    lifetime = null;
+
     constructor(projectileAuthor) {
         super(projectileAuthor.getPos());
         this.projectileAuthor = projectileAuthor;
         this.setMoveDirection(projectileAuthor.lookAt)
             .setNoclip(false);
     }
+
+
+    setDelayAnim(delayAnim, delayAnimTime) {
+        this.delayAnim = delayAnim;
+        this.delayAnimTime = delayAnimTime;
+        return this;
+    }
+
+    setLifeTime(lieftime) {
+        this.lifetime = lieftime;
+        return this;
+    }
+
 
     setRenderable(renderable) {
         super.setRenderable(renderable);
@@ -1880,8 +1897,19 @@ class ProjectileActor extends MovableActor{
         this.renderable.setAnim('redStarDeath', Animation.linearNoRepeat).setAnimTime(300);
     }
 
+    setDamage(damage) {
+        this.damage = damage;
+        return this;
+    }
+
     frame(delta) {
         super.frame(delta);
+
+        if(this.delayAnimTime > 0) {
+            this.delayAnimTime -= delta;
+            return;
+        }
+
 
         if(this.active) {
             for (let index in this.game.lastFullActors) {
@@ -1898,6 +1926,15 @@ class ProjectileActor extends MovableActor{
                 this.game.mapManager.currentGameScreen.setTileByVector(this.getMapCordsVec(this.collidedWith), 0);
                 this.goToInactiveState(null);
             }
+
+            if(this.lifetime !== null) {
+                if(this.lifetime > 0) {
+                    this.lifetime -= delta;
+                } else {
+                    this.goToInactiveState(null);
+                }
+            }
+
 
         } else if(this.renderable.isAnimDone) {
             this.markForRemoval();
@@ -2013,6 +2050,45 @@ class EnemyActor extends BreakableActor{
 
 
 }
+
+class PlaneActor extends BreakableActor{
+
+    stateMachine;
+
+    init(game) {
+        super.init(game);
+
+        this.speed = this.speed / 2;
+
+        this.stateMachine = new StateMachine();
+        this.stateMachine.addState(new StateMachineState('bomb', (item, delta, state) => {
+
+            if (item.weaponTick === undefined) {
+                item.weaponTick = 0;
+            } else if (item.weaponTick < 0) {
+                this.game.addActorToCurrScreen(
+                    (new ProjectileActor(this).setDamage(53).setRenderable((new AnimatedRenderableItem('textures/bullets.png')).setAnim('greenSphereGrow', Animation.linearNoRepeat).setAnimTime(500)).setSpeed(0).setDelayAnim('redStarFly', 600).setLifeTime(500))
+
+                );
+                item.weaponTick = 10;
+            } else {
+                item.weaponTick -= delta;
+            }
+
+        }));
+
+
+    }
+
+    frame(delta) {
+        super.frame(delta);
+        this.stateMachine.performCurrentStateBehaviour(this, delta);
+
+    }
+
+
+}
+
 
 class Player extends BreakableActor {
 
@@ -2232,6 +2308,8 @@ class Game {
             {text:'Dig', action:() => {slf.mapManager.currentGameScreen.setTileByVector(addXY(playerCords, playerLookAt), 0); backToGameAction();}},
             {text:'summonSollie', action:() => {slf.addActorToCurrScreen((new EnemyActor(game.player.getPos())).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog())); backToGameAction();}},
             {text:'Inventory'},
+            {text:'Airstrike', action:() => {slf.addActorToCurrScreen((new PlaneActor({x:0,y:0})).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setNoclip(true).setMoveDirection({x:1, y:1})).setSpeed(400); backToGameAction();}},
+
         ];
 
         let closestDialogs = this.findClosestActorsDialogs().map(x => x.dialog.asDialogOption());
@@ -2398,6 +2476,7 @@ class Game {
         this.resourceLoadManager.addResource(new TexturePackResource('textures/bullets.png')
             .addNamedFrames('redStarDeath', {x:17, y:17},[{x:136, y:9}, {x:155, y:9}, {x:172, y:9}])
             .addNamedFrames('redStarFly', {x:20, y:12},[{x:205, y:9}, {x:225, y:9}, {x:248, y:9}, {x:274, y:9}])
+            .addNamedFrames('greenSphereGrow', {x:14, y:14},[{x:49, y:94}, {x:65, y:94}, {x:81, y:94}, {x:97, y:94}, {x:113, y:94}, {x:129, y:94}])
         );
 
         this.resourceLoadManager.load();
