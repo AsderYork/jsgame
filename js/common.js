@@ -25,6 +25,11 @@ function getRandomVec(magnitude) {
     return {x:getRandomInt(-magnitude, magnitude), y:getRandomInt(-magnitude, magnitude)};
 }
 
+function getRandomVecSquare(magnitude) {
+    return {x:getRandomInt(0, magnitude), y:getRandomInt(0, magnitude)};
+}
+
+
 function getRandomElement(arr) {
     return arr[getRandomInt(0, arr.length - 1)];
 }
