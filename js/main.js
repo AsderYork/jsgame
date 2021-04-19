@@ -710,6 +710,19 @@ class GameMapScreen {
 
     }
 
+    addActor(actor, name) {
+
+        if(name === undefined) {
+            name = game.actorsIndex++;
+        }
+
+        if(actor) {
+            this.actors[name] = actor;
+            actor.init(game);
+            return actor;
+        }
+    }
+
 }
 
 class MapManager {
@@ -752,7 +765,7 @@ class MapManager {
     }
 
     setupNPCS(map) {
-        map.actors['npc#1'] = (new MovableActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)}))).setRenderable((new RenderableCharacter()).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog());
+        map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)}))).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))));
     }
 
     moveToAMap(direction) {
@@ -869,7 +882,7 @@ class MapManager {
             .connectRandomRoads(getRandomInt(1, 3))
             .addIsland(getRandomInt(5, 13))
             .connectLastTwo(getRandomInt(1, 6))
-            .chance(0.4, (x) => self.setupNPCS(x))
+            .chance(2, (x) => self.setupNPCS(x))
             .get();
 
 
