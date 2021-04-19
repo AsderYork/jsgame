@@ -21,6 +21,10 @@ function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function getRandomVec(magnitude) {
+    return {x:getRandomInt(-magnitude, magnitude), y:getRandomInt(-magnitude, magnitude)};
+}
+
 function getRandomElement(arr) {
     return arr[getRandomInt(0, arr.length - 1)];
 }
@@ -134,4 +138,12 @@ function addXY(vec1, vec2) {
 }
 function distanceXY(vec1, vec2) {
     return Math.sqrt((vec1.x - vec2.x) * (vec1.x - vec2.x) + (vec1.y - vec2.y) * (vec1.y - vec2.y));
+}
+
+function vecSub(vec1, vec2) {
+return {x: vec1.x - vec2.x, y: vec1.y - vec2.y};
+}
+
+function MakeDirVec(vec) {
+    return{x: vec.x > 0 ? 1 : (vec.x < 0 ? -1 : 0), y : vec.y > 0 ? 1 : (vec.y < 0 ? -1 : 0)};
 }
