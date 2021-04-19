@@ -1,3 +1,5 @@
+
+
 class Keyboard {
 
     #state = {};
@@ -881,6 +883,13 @@ class MapManager {
         this.setMap(this.currMapCoords, this.currentGameScreen);
     }
 
+    isPointVisible(origin, target) {
+
+        let points = getPointsOnLine(origin, target);
+        let self = this;
+        return points.every(x => self.currentGameScreen.getTileByVector(x).traversable);
+    }
+
 }
 
 class Renderer {
@@ -1617,6 +1626,7 @@ class UIRenderer extends Renderer {
 
 }
 
+
 class Actor {
 
     x;
@@ -1701,6 +1711,7 @@ class MovableActor extends Actor {
     moveDirection = {x:0, y:0};
     lookAt = {x:0, y:0};
     size = {x:8, y:10};
+    collidedWith = null;
 
 
     set speed(speed) {this.#speed = speed;}
@@ -1770,6 +1781,11 @@ class MovableActor extends Actor {
 
     }
 
+    getMapCordsVec(vec) {
+        return this.getMapCords(vec.x, vec.y);
+    }
+
+
     checkBoxCollision(screenCordX, screenCordY) {
         return this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX, screenCordY)).traversable &&
             this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX + this.size.x, screenCordY + this.size.y)).traversable &&
@@ -1805,10 +1821,13 @@ class MovableActor extends Actor {
         if (this.checkBoxCollision(newScreenX, newScreenY) || this.#noclip) {
             this.x = newScreenX;
             this.y = newScreenY;
+            this.collidedWith = null;
         } else if (this.checkBoxCollision(this.x, newScreenY)) {
             this.y = newScreenY;
+            this.collidedWith = {x: this.x, y:this.y};
         } else if (this.checkBoxCollision(newScreenX, this.y)) {
             this.x = newScreenX;
+            this.collidedWith = {x: this.x, y:this.y};
         }
 
 
@@ -1827,7 +1846,7 @@ class ProjectileActor extends MovableActor{
         super(projectileAuthor.getPos());
         this.projectileAuthor = projectileAuthor;
         this.setMoveDirection(projectileAuthor.lookAt)
-            .setNoclip(true);
+            .setNoclip(false);
     }
 
     setRenderable(renderable) {
@@ -1836,25 +1855,37 @@ class ProjectileActor extends MovableActor{
         return this;
     }
 
+    goToInactiveState(affectedActor) {
+
+        if (affectedActor) {
+            affectedActor.inflictDamage(this.damage);
+        }
+
+        this.active = false;
+        this.renderable.reset();
+        this.setMoveDirection({x:0, y:0});
+        this.renderable.setAnim('redStarDeath', Animation.linearNoRepeat).setAnimTime(300);
+    }
+
     frame(delta) {
         super.frame(delta);
 
         if(this.active) {
             for (let index in this.game.lastFullActors) {
                 let actor = this.game.lastFullActors[index];
-                if (actor !== this && actor !== this.projectileAuthor && actor.size !== undefined) {
+                if (actor !== this && actor !== this.projectileAuthor && actor.size !== undefined && actor instanceof BreakableActor) {
                     if (this.checkBoxCollisionVector(actor.getPos(), actor.size)) {
-                        if (actor instanceof BreakableActor) {
-                            actor.inflictDamage(this.damage);
-                            this.active = false;
-                            this.renderable.reset();
-                            this.setMoveDirection({x:0, y:0});
-                            this.renderable.setAnim('redStarDeath', Animation.linearNoRepeat).setAnimTime(300);
-                            break;
-                        }
+                        this.goToInactiveState(actor);
+                        break;
                     }
                 }
             }
+
+            if(this.collidedWith !== null) {
+                this.game.mapManager.currentGameScreen.setTileByVector(this.getMapCordsVec(this.collidedWith), 0);
+                this.goToInactiveState(null);
+            }
+
         } else if(this.renderable.isAnimDone) {
             this.markForRemoval();
         }
@@ -1902,6 +1933,71 @@ class BreakableActor extends MovableActor {
     frame(delta) {
         super.frame(delta);
     }
+
+}
+
+class EnemyActor extends BreakableActor{
+
+    stateMachine;
+
+    init(game) {
+        super.init(game);
+
+        this.speed = this.speed / 2;
+
+        this.stateMachine = new StateMachine();
+        this.stateMachine.addState(new StateMachineState('idle', (item, delta, state) => {
+
+            if(state.target === undefined || item.collidedWith !== null || (distanceXY(item.getPos(), state.target) < 5)) {
+                state.target = addXY(item.getPos(), getRandomVec(30));
+                item.setMoveDirection({x:0, y:0});
+                state.sleep = getRandomInt(1500, 4500);
+            } else if (state.sleep !== undefined && state.sleep > 0) {
+                state.sleep -= delta;
+            } else {
+                item.setMoveDirection(MakeDirVec(vecSub(state.target, item.getPos())));
+            }
+        }, {attack: (item, delta, state) => {return true;}}));
+
+        this.stateMachine.addState(new StateMachineState('attack', (item, delta, state) => {
+
+            let player = Object.values(item.game.getVisibleActorsInRadius(item, 1000)).find(x => x instanceof Player);
+
+            if(player) {
+                item.lookAt = MakeDirVec(vecSub(player.getPos(), item.getPos()));
+
+                if (item.weaponTick === undefined) {
+                    item.weaponTick = 0;
+                } else if (item.weaponTick < 0) {
+                    this.game.addActorToCurrScreen(
+                        (new ProjectileActor(this).setRenderable((new AnimatedRenderableItem('textures/bullets.png')).setAnim('redStarFly', Animation.linearNoRepeat).setAnimTime(500)))
+                            .setSpeed(140)
+                    );
+                    item.weaponTick = 600;
+                } else {
+                    item.weaponTick -= delta;
+                }
+
+                if(player && distanceXY(player.getPos(), item.getPos()) > 15) {
+                    item.setMoveDirection(MakeDirVec(vecSub(player.getPos(), item.getPos())));
+
+                } else {
+                    item.setMoveDirection({x:0, y:0});
+                }
+
+            }
+
+        }));
+
+
+    }
+
+    frame(delta) {
+        super.frame(delta);
+        this.stateMachine.performCurrentStateBehaviour(this, delta);
+
+    }
+
 
 }
 
@@ -2079,6 +2175,23 @@ class Game {
 
     teleportCooldown;
 
+    getVisibleActorsInRadius(targetActor, radius) {
+
+        let visibleActors = {};
+        let pos = targetActor.getPos();
+        let mapCords = targetActor.getMapCords();
+
+        for(let index in this.lastFullActors) {
+            let actorPos = this.lastFullActors[index].getPos();
+            let actorMapPos = this.lastFullActors[index].getMapCords();
+            if(targetActor !== this.lastFullActors[index] && distanceXY(actorPos, pos) <= radius && this.mapManager.isPointVisible(mapCords, actorMapPos)) {
+                visibleActors[index] = this.lastFullActors[index];
+            }
+        }
+        return visibleActors;
+
+    }
+
     addRenderer(renderer) {
         this.loop.addRenderer(renderer);
         return this;
@@ -2104,7 +2217,7 @@ class Game {
         let currDialog = [
             {selected:true, text:'back to map', action: backToGameAction},
             {text:'Dig', action:() => {slf.mapManager.currentGameScreen.setTileByVector(addXY(playerCords, playerLookAt), 0); backToGameAction();}},
-            {text:'summonSollie', action:() => {slf.addActorToCurrScreen((new BreakableActor(game.player.getPos())).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog())); backToGameAction();}},
+            {text:'summonSollie', action:() => {slf.addActorToCurrScreen((new EnemyActor(game.player.getPos())).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog())); backToGameAction();}},
             {text:'Inventory'},
         ];
 
