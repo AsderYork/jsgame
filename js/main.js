@@ -1752,9 +1752,11 @@ class UIRenderer extends Renderer {
 
         let res = game.resourceLoadManager.getResource('textures/UI/icons.png');
 
-        res.drawFrameInContext(this.context, 'health', addXY(pos, {x:32, y:32}), 0, 0.30);
+        let hpshift = {x:20, y:20};
 
-        this.fillText(game.player.health, addXY(pos, {x:32 + 12, y:32 + 9}), '#ffffff', '64px arcadeclassic');
+        res.drawFrameInContext(this.context, 'health', addXY(pos, hpshift), 0, 0.30);
+
+        this.fillText(game.player.health, addXY(pos, addXY(hpshift, {x:12, y:9})), '#ffffff', '64px arcadeclassic');
 
     }
 
