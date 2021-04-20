@@ -1700,7 +1700,7 @@ class UIRenderer extends Renderer {
 
         this.drawBox(pos, addXY(pos, size), {blocks:{tl:'tlh'}});
 
-        let res = game.resourceLoadManager.getResource('textures/ui/icons.png');
+        let res = game.resourceLoadManager.getResource('textures/UI/icons.png');
 
         res.drawFrameInContext(this.context, 'health', addXY(pos, {x:32, y:32}), 0, 0.30);
 
@@ -2550,7 +2550,7 @@ class Game {
             .addNamedFrames('greenSphereGrow', {x:14, y:14},[{x:49, y:94}, {x:65, y:94}, {x:81, y:94}, {x:97, y:94}, {x:113, y:94}, {x:129, y:94}])
         );
 
-        this.resourceLoadManager.addResource(new TexturePackResource('textures/ui/denzi.png')
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/UI/denzi.png')
             .setGridSize({x:16, y:16})
             .addNamedFrame('double.tl', {x:0, y:0})
             .addNamedFrame('double.tl', {x:0, y:0})
@@ -2590,7 +2590,7 @@ class Game {
             .addNamedFrame('gems.top.v2', {x:9, y:2})
         );
 
-        this.resourceLoadManager.addResource(new TexturePackResource('textures/ui/icons.png')
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/UI/icons.png')
             .setGridSize({x:32, y:32})
             .setGridSpacing({x:2, y:2})
             .addNamedFrame('health', {x:3, y:4})
@@ -2619,7 +2619,7 @@ class Game {
         this.addRenderer(this.background);
 
         let self = this;
-        this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/ui/denzi.png'));
+        this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/UI/denzi.png'));
         this.keyboard.onCommandActive('selectUp', 'menu', () => self.uiBblock.shiftSelectedOption(-1));
         this.keyboard.onCommandActive('selectDown', 'menu', () => self.uiBblock.shiftSelectedOption(1));
         this.keyboard.onCommandActive('select', 'menu', () => self.uiBblock.selectCurrent());
