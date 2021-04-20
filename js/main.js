@@ -765,7 +765,13 @@ class MapManager {
     }
 
     setupNPCS(map) {
+
         map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)}))).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))));
+        map.addActor((new ItemActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
+            .setRenderable((new staticRenderabeItem('textures/UI/icons.png'))
+                .setAnimationName('potion.red')
+                .setScale(0.5))
+            .onPickup(x => x.health += 134, x => x instanceof BreakableActor));
     }
 
     moveToAMap(direction) {
@@ -1152,6 +1158,49 @@ class RenderableItem {
         return this;
     }
 
+}
+
+class staticRenderabeItem extends RenderableItem{
+
+    animationName;
+    animationFrame;
+    scale = 1.0;
+    angle = 0;
+
+    init(renderer) {
+        super.init(renderer);
+    }
+
+    constructor(requestedResource) {
+        super(requestedResource);
+    }
+
+    setAnimationName(animationName) {
+        this.animationName = animationName;
+        return this;
+    }
+
+    setAnimationFrame(animationFrame) {
+        this.animationFrame = animationFrame;
+        return this;
+    }
+
+    setScale(scale) {
+        this.scale = scale;
+        return this;
+    }
+
+    setAngle(scale) {
+        this.angle = angle;
+        return this;
+    }
+
+
+
+    draw(time, renderer) {
+        super.draw(time, renderer);
+        this.resource.drawFrameInContext(this.renderer.context, this.animationName, this.itemPos, this.animationFrame, this.scale, this.angle);
+    }
 
 }
 
@@ -2122,6 +2171,54 @@ class EnemyActor extends BreakableActor{
 
 }
 
+class ItemActor extends MovableActor{
+
+    constructor(pos) {
+        super(pos);
+    }
+
+    init(game) {
+        super.init(game);
+    }
+
+    pickupCallbacks = [];
+
+    onPickup(pickupCallback, condition = x => true) {
+        this.pickupCallbacks.push({condition:condition, callback:pickupCallback});
+        return this;
+    }
+
+
+    getCollidedActor() {
+        for (let index in this.game.lastFullActors) {
+            let actor = this.game.lastFullActors[index];
+            if (actor !== this && actor !== this.projectileAuthor && actor.size !== undefined && actor instanceof BreakableActor) {
+                if (this.checkBoxCollisionVector(actor.getPos(), actor.size)) {
+                    return actor;
+                }
+            }
+        }
+    }
+
+    frame(delta) {
+        super.frame(delta);
+
+        let target = this.getCollidedActor();
+        if(target && target instanceof BreakableActor) {
+            for(let callback of this.pickupCallbacks) {
+                if(callback.condition(target)) {
+                    callback.callback(target);
+                    break;
+                }
+            }
+
+            this.markForRemoval();
+        }
+
+    }
+
+}
+
 class PlaneActor extends BreakableActor{
 
     stateMachine;
@@ -2594,6 +2691,7 @@ class Game {
             .setGridSize({x:32, y:32})
             .setGridSpacing({x:2, y:2})
             .addNamedFrame('health', {x:3, y:4})
+            .addNamedFrame('potion.red', {x:0, y:3})
         );
 
 
