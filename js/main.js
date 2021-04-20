@@ -1069,7 +1069,7 @@ class MapRenderer extends Renderer {
                     block = this.floorPattern(mapCords, material, materialData);break;
                 }
                 case 'directionalPattern': {
-                    block = multiplyXY(this.directionalPattern(mapCords, material, materialData), this.blocksize);break;
+                    block = vecScale(this.directionalPattern(mapCords, material, materialData), this.blocksize);break;
                 }
                 default: {
                     block = this.getMaterialBlock(materialData,x, y); break;
@@ -1413,11 +1413,70 @@ class TexturePackResource extends ManagedResource {
 
     animations = {};
     animationSizes = {};
+    gridSize = null;
+    gridSpacing = {x:0, y:0};
+
+    findAnimationsByNameStart(nameStart) {
+        return Object.keys(this.animations).filter(x => x.startsWith(nameStart));
+    }
+
+    setGridSize(gridSize) {
+        this.gridSize = gridSize;
+        return this;
+    }
+    setGridSpacing(gridSpacing) {
+        this.gridSpacing = gridSpacing;
+        return this;
+    }
+
+    getFrame(animationName, frameIndex) {
+        if(this.animations[animationName]) {
+            if(this.gridSize !== null) {
+                return {pos: vecMul(this.animations[animationName][frameIndex], addXY(this.gridSize, this.gridSpacing)), size: this.gridSize};
+            } else {
+                return {pos: vecMul(this.animations[animationName][frameIndex], this.animationSizes[animationName]), size: this.gridSize};
+            }
+        } else {
+            return null;
+        }
+    }
 
     addNamedFrames(name, size, frames) {
         this.animations[name] = frames;
         this.animationSizes[name] = size;
         return this;
+    }
+
+    addNamedFrame(name, frame, size = undefined) {
+        this.animations[name] = [frame];
+        if(size) {
+            this.animationSizes[name] = size;
+        }
+        return this;
+    }
+
+    drawInContext(context, blockSize, blockPos, pictPos, scale = 1.0, angle = undefined) {
+
+        if(angle && angle !== 0) {
+            let shiftx = pictPos.x + (blockSize.x * scale) / 2;
+            let shifty = pictPos.y + (blockSize.y * scale) / 2;
+
+            context.translate(shiftx, shifty);
+            context.rotate(angle * (Math.PI / 180));
+            context.translate(-shiftx, -shifty);
+            context.drawImage(this.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
+            context.setTransform(1,0,0,1,0,0)
+        } else {
+            context.drawImage(this.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
+        }
+
+    }
+
+    drawFrameInContext(context, animationName, pictPos, frame = 0, scale = 1, angle = 0) {
+        let frameVal = this.getFrame(animationName, frame);
+        if(frameVal) {
+            this.drawInContext(context, frameVal.size, frameVal.pos, pictPos, scale, angle);
+        }
     }
 
 }
@@ -1496,91 +1555,111 @@ class ActorsRrenderer extends Renderer {
 
 }
 
+
 class UIRenderer extends Renderer {
-    blocksize = 16;
+    #resource;
 
-    #texturepack = 'textures/UI/16x16_gui_Denzi.png';
-    #textureImage;
-
+    variants = {};
+    currVarriant = {};
     currentUIOptions = [];
 
-    constructor(canvas) {
+    constructor(canvas, resource) {
         super(canvas);
+        this.#resource = resource;
 
-        this.#textureImage = new Image();
-        let self = this;
-        this.#textureImage.onload = () => {self.textureImageReady = true;};
-
-        this.#textureImage.src = this.#texturepack;
-
-        this.currentUIOptions = [];
-
+        this.fetchElementVariants('double');
+        this.fetchElementVariants('gems');
     }
 
-    drawBoxElement(edge, textureCounter, blocksize, positionX, positionY) {
-        if(edge) {
-            if(Array.isArray(edge)) {
-                this.context.drawImage(this.#textureImage, edge[textureCounter].x, edge[textureCounter].y, blocksize, blocksize, positionX, positionY, blocksize, blocksize);
-                textureCounter = (textureCounter + 1) % edge.length;
-            } else {
-                this.context.drawImage(this.#textureImage, edge.x, edge.y, blocksize, blocksize, positionX, positionY, blocksize, blocksize);
+    fetchElementVariants(stylename) {
+        this.variants[stylename] = {};
+        this.currVarriant[stylename] = {};
+
+        for (let elem of ['top', 'bottom', 'left', 'right', 'center', 'tl', 'tr', 'bl', 'br']) {
+            this.variants[stylename][elem] = this.#resource.findAnimationsByNameStart(`${stylename}.${elem}`).map(x => x.split('.')[2]).filter(x => x !== undefined);
+            this.currVarriant[stylename][elem] = (this.variants[stylename][elem].length > 0) ? 0 : null;
+        }
+    }
+
+    resetCurrVariant() {
+        for(let style in this.currVarriant) {
+            for(let block in this.currVarriant[style]) {
+                if(this.currVarriant[style][block] !== null) {
+                    this.currVarriant[style][block] = 0;
+                }
             }
         }
-        return textureCounter;
     }
 
-    drawBox(blocksize, start, end, edges) {
+    drawBoxElement(stylename, blockname, pictPos) {
+        let animationName = [stylename, blockname];
 
-        this.drawBoxElement(edges.topLeft, 0, blocksize, start.x, start.y);
-        this.drawBoxElement(edges.topRight, 0, blocksize, end.x - blocksize, start.y);
-
-
-        let topTexture = 0;
-        let bottomTexture = 0;
-
-        for(let i = start.x + blocksize; i < end.x - blocksize; i += blocksize) {
-            topTexture = this.drawBoxElement(edges.top, topTexture, blocksize, i, start.y);
-            bottomTexture = this.drawBoxElement(edges.bottom, bottomTexture, blocksize, i, end.y - blocksize);
+        if(this.currVarriant[stylename][blockname] !== null && this.currVarriant[stylename][blockname] !== undefined) {
+            this.currVarriant[stylename][blockname]++;
+            if(this.currVarriant[stylename][blockname] >= this.variants[stylename][blockname].length) {
+                this.currVarriant[stylename][blockname] = 0;
+            }
+            animationName.push(this.variants[stylename][blockname][this.currVarriant[stylename][blockname]]);
         }
 
-        this.drawBoxElement(edges.bottomLeft, 0, blocksize, start.x, end.y - blocksize);
-        this.drawBoxElement(edges.bottomRight, 0, blocksize, end.x - blocksize, end.y - blocksize);
+        this.#resource.drawFrameInContext(this.context, animationName.join('.'), pictPos);
+    }
 
-        let leftTexture = 0;
-        let rightTexture = 0;
+    drawBox(start, end, options) {
 
-        for(let i = start.y + blocksize; i < end.y - blocksize; i += blocksize) {
-            leftTexture = this.drawBoxElement(edges.left, leftTexture, blocksize, start.x, i);
-            rightTexture = this.drawBoxElement(edges.right, rightTexture, blocksize, end.x - blocksize, i);
-        }
+        let determineBlockStyle = block => options?.styles?.[block] ? options?.styles?.[block] : 'double';
+        let determineBlockName = block => options?.blocks?.[block] ? options?.blocks?.[block] : block;
+        let drawOnPos = (block, pos) => {let blk = determineBlockName(block); this.drawBoxElement(determineBlockStyle(blk), blk, pos);};
 
-        let centerTexture = 0;
-        if(edges.center) {
-            for(let x = start.x + blocksize; x < end.x - blocksize; x += blocksize) {
-                for(let y = start.y + blocksize; y < end.y - blocksize; y += blocksize) {
-                    centerTexture = this.drawBoxElement(edges.center, centerTexture, blocksize, x, y);
+        if(!(options?.excludeCenter)) {
+            for(let x = start.x; x < end.x; x += this.#resource.gridSize.x) {
+                for(let y = start.y; y < end.y; y += this.#resource.gridSize.y) {
+                    drawOnPos('center', {x:x, y:y});
                 }
             }
         }
 
+        for(let x = start.x; x < end.x; x += this.#resource.gridSize.x) {
+            drawOnPos('top', {x:x, y:start.y});
+            drawOnPos('bottom', {x:x, y:end.y});
+        }
+
+        for(let y = start.y; y < end.y; y += this.#resource.gridSize.y) {
+            drawOnPos('left', {x:start.x, y:y});
+            drawOnPos('right', {x:end.x, y:y});
+        }
+
+        drawOnPos('tl', start);
+        drawOnPos('tr', {x:end.x, y:start.y});
+        drawOnPos('bl', {x:start.x, y:end.y});
+        drawOnPos('br', end);
 
     }
 
     drawText() {
+        if(this.currentUIOptions.length <= 0) {
+            return;
+        }
+
         this.context.font = "16px arcadeclassic";
 
         for(let i = 0; i < this.currentUIOptions.length; i++) {
             if(this.currentUIOptions[i].selected) {
                 this.context.fillStyle = "#ffffff";
-                this.context.fillText('>', 20, 526 + this.blocksize * 2 + i * 16);
-                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + this.blocksize * 2 + i * 16);
+                this.context.fillText('>', 20, 526 + 16 * 2 + i * 16);
+                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
             } else {
                 this.context.fillStyle = "#e2e2e2";
-                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + this.blocksize * 2 + i * 16);
+                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
             }
         }
 
 
+    }
+
+    fillText(text, pos, fillStyle = "#ffffff", font = "16px arcadeclassic") {
+        this.context.fillStyle = fillStyle;
+        this.context.fillText(text, pos.x, pos.y);
     }
 
     getSelectedOptionId() {
@@ -1605,36 +1684,28 @@ class UIRenderer extends Renderer {
         return true;
     }
 
-
     render(time) {
-        if(this.textureImageReady) {
+        if(this.#resource.isReady) {
+            this.resetCurrVariant();
 
-            this.drawBox(this.blocksize, {x:0, y:0}, {x:512 + this.blocksize * 2, y:512 + this.blocksize * 2}, {
-                topLeft:{x:32, y:288},
-                top:{x:64,y:288},
-                topRight:{x:80,y:288},
-                bottomLeft:{x:160,y:368},
-                bottomRight:{x:208,y:368},
-                left:{x:32,y:314},
-                right:{x:80,y:314},
-                bottom:[{x:160,y:320}, {x:176, y:320}]
-            });
-
-            this.drawBox(this.blocksize, {x:0, y:512 + this.blocksize}, {x:512 + this.blocksize * 2, y:512 + this.blocksize * 2 + 128}, {
-                bottomLeft:{x:32,y:336},
-                bottomRight:{x:80,y:336},
-                left:{x:32,y:314},
-                right:{x:80,y:314},
-                bottom:{x:64,y:336},
-                center: [
-                    {x:224,y:320}, {x:240,y:320},
-                    {x:224,y:336}, {x:240,y:336},
-                ],
-            });
-
+            this.drawBox({x:0, y:0}, {x:512 + 16, y:512 + 16}, {excludeCenter:true});
+            this.renderLeftPannel({x:512 + 16, y:0}, {x:128, y:512 + 16})
+            this.drawBox({x:0, y:512 + 16}, {x:512 + 16, y:512 + 16 + 128}, {styles:{top:'gems'}, blocks:{tl:'tlv', tr:'cross'}});
 
             this.drawText();
         }
+    }
+
+    renderLeftPannel(pos, size) {
+
+        this.drawBox(pos, addXY(pos, size), {blocks:{tl:'tlh'}});
+
+        let res = game.resourceLoadManager.getResource('textures/ui/icons.png');
+
+        res.drawFrameInContext(this.context, 'health', addXY(pos, {x:32, y:32}), 0, 0.30);
+
+        this.fillText(game.player.health, addXY(pos, {x:32 + 12, y:32 + 9}), '#ffffff', '64px arcadeclassic');
+
     }
 
 }
@@ -2479,6 +2550,53 @@ class Game {
             .addNamedFrames('greenSphereGrow', {x:14, y:14},[{x:49, y:94}, {x:65, y:94}, {x:81, y:94}, {x:97, y:94}, {x:113, y:94}, {x:129, y:94}])
         );
 
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/ui/denzi.png')
+            .setGridSize({x:16, y:16})
+            .addNamedFrame('double.tl', {x:0, y:0})
+            .addNamedFrame('double.tl', {x:0, y:0})
+            .addNamedFrame('double.tr', {x:3, y:0})
+            .addNamedFrame('double.bl', {x:0, y:3})
+            .addNamedFrame('double.br', {x:3, y:3})
+            .addNamedFrame('double.top.v1', {x:1, y:0})
+            .addNamedFrame('double.top.v2', {x:2, y:0})
+            .addNamedFrame('double.bottom.v1', {x:1, y:3})
+            .addNamedFrame('double.bottom.v2', {x:2, y:3})
+            .addNamedFrame('double.left.v1', {x:0, y:1})
+            .addNamedFrame('double.left.v2', {x:0, y:2})
+            .addNamedFrame('double.right.v1', {x:3, y:1})
+            .addNamedFrame('double.right.v2', {x:3, y:2})
+            .addNamedFrame('double.center.1', {x:0, y:4})
+            .addNamedFrame('double.center.2', {x:1, y:4})
+            .addNamedFrame('double.center.3', {x:2, y:4})
+            .addNamedFrame('double.center.4', {x:3, y:4})
+            .addNamedFrame('double.center.5', {x:0, y:5})
+            .addNamedFrame('double.center.6', {x:1, y:5})
+            .addNamedFrame('double.center.7', {x:2, y:5})
+            .addNamedFrame('double.center.8', {x:3, y:5})
+            .addNamedFrame('double.center.9', {x:0, y:6})
+            .addNamedFrame('double.center.10', {x:1, y:6})
+            .addNamedFrame('double.center.11', {x:2, y:6})
+            .addNamedFrame('double.center.12', {x:3, y:6})
+            .addNamedFrame('double.center.13', {x:0, y:7})
+            .addNamedFrame('double.center.14', {x:1, y:7})
+            .addNamedFrame('double.center.15', {x:2, y:7})
+            .addNamedFrame('double.center.16', {x:3, y:7})
+            .addNamedFrame('double.tlv', {x:8, y:6})
+            .addNamedFrame('double.tlh', {x:12, y:4})
+            .addNamedFrame('double.cross', {x:10, y:4})
+            .addNamedFrame('gems.bottom.v1', {x:8, y:2})
+            .addNamedFrame('gems.bottom.v2', {x:9, y:2})
+            .addNamedFrame('gems.top.v1', {x:8, y:2})
+            .addNamedFrame('gems.top.v2', {x:9, y:2})
+        );
+
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/ui/icons.png')
+            .setGridSize({x:32, y:32})
+            .setGridSpacing({x:2, y:2})
+            .addNamedFrame('health', {x:3, y:4})
+        );
+
+
         this.resourceLoadManager.load();
     }
 
@@ -2501,7 +2619,7 @@ class Game {
         this.addRenderer(this.background);
 
         let self = this;
-        this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"));
+        this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/ui/denzi.png'));
         this.keyboard.onCommandActive('selectUp', 'menu', () => self.uiBblock.shiftSelectedOption(-1));
         this.keyboard.onCommandActive('selectDown', 'menu', () => self.uiBblock.shiftSelectedOption(1));
         this.keyboard.onCommandActive('select', 'menu', () => self.uiBblock.selectCurrent());

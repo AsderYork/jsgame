@@ -135,9 +135,14 @@ function getPointsOnLineWidth(startObject, endObject, wd)
 
 }
 
-function multiplyXY(vec, mul) {
+function vecScale(vec, mul) {
     return {x:vec.x * mul, y:vec.y * mul};
 }
+
+function vecMul(vec, mul) {
+    return {x:vec.x * mul.x, y:vec.y * mul.y};
+}
+
 function addXY(vec1, vec2) {
     return {x:vec1.x + vec2.x, y:vec1.y + vec2.y};
 }
