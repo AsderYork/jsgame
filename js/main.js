@@ -766,12 +766,13 @@ class MapManager {
 
     setupNPCS(map) {
 
-        map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)}))).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))));
-        map.addActor((new ItemActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
-            .setRenderable((new staticRenderabeItem('textures/UI/icons.png'))
-                .setAnimationName('potion.red')
-                .setScale(0.5))
-            .onPickup(x => x.health += 134, x => x instanceof BreakableActor));
+        map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
+            .setRenderable((new RenderableCharacter(null,'textures/characters.png'))
+                .setStopAtFrame(1).setVariation(getRandomInt(0, 11)))
+            .on('death', x => {map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20)))); console.log('caaaal!');})
+        );
+
+        map.addActor(game.actorsLib.get('healthPotion').setPos(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})));
     }
 
     moveToAMap(direction) {
@@ -888,7 +889,7 @@ class MapManager {
             .connectRandomRoads(getRandomInt(1, 3))
             .addIsland(getRandomInt(5, 13))
             .connectLastTwo(getRandomInt(1, 6))
-            .chance(2, (x) => self.setupNPCS(x))
+            .chance(1, (x) => self.setupNPCS(x))
             .get();
 
 
@@ -1765,6 +1766,24 @@ class Actor {
     x;
     y;
 
+    callbacks = {};
+    on(callback, method, condition = x => true) {
+        if(!this.callbacks[callback]) {this.callbacks[callback] = [];}
+        this.callbacks[callback].push({condition:condition, callback:method});
+        return this;
+    }
+    fireCallback(callback, param = null) {
+        if(this.callbacks[callback] && this.callbacks[callback].length > 0) {
+            for(let method of this.callbacks[callback]) {
+                if(method.condition(this, param)) {
+                    method.callback(this, param);
+                    return true;
+                }
+            }
+        }
+    }
+
+
     #actorRenderer;
     renderable;
     dialog;
@@ -1812,7 +1831,7 @@ class Actor {
     }
 
 
-    constructor(pos) {
+    constructor(pos = {x:0, y:0}) {
         this.x = pos.x;
         this.y = pos.y;
     }
@@ -1820,6 +1839,8 @@ class Actor {
     setPos(vect) {
         this.x = vect.x;
         this.y = vect.y;
+
+        return this;
     }
 
     setDialog(dialog) {
@@ -2081,7 +2102,7 @@ class BreakableActor extends MovableActor {
     inflictDamage(damage) {
         this.health -= damage;
 
-        if(this.health <= 0) {this.markForRemoval(); this.health = 0;}
+        if(this.health <= 0) {if(!this.shouldBeRemoved) {this.markForRemoval(); this.fireCallback('death');} this.health = 0;}
         if(this.health > this.maxHealth) {this.health = this.maxHealth;}
         return this;
 
@@ -2181,11 +2202,8 @@ class ItemActor extends MovableActor{
         super.init(game);
     }
 
-    pickupCallbacks = [];
-
     onPickup(pickupCallback, condition = x => true) {
-        this.pickupCallbacks.push({condition:condition, callback:pickupCallback});
-        return this;
+        return this.on('pickup', (x, y) => pickupCallback(y), (x, y) => condition(y));
     }
 
 
@@ -2204,17 +2222,9 @@ class ItemActor extends MovableActor{
         super.frame(delta);
 
         let target = this.getCollidedActor();
-        if(target && target instanceof BreakableActor) {
-            for(let callback of this.pickupCallbacks) {
-                if(callback.condition(target)) {
-                    callback.callback(target);
-                    break;
-                }
-            }
-
+        if(target && this.fireCallback('pickup', target)) {
             this.markForRemoval();
         }
-
     }
 
 }
@@ -2391,12 +2401,29 @@ class interactableTerrain_Portal extends interactableObject {
 
 }
 
+class ActorsLib {
+
+    lib = {};
+
+    add(name, createMethod) {
+        this.lib[name] = createMethod;
+        return this;
+    }
+
+    get(name) {
+        return this.lib[name]();
+    }
+
+}
+
+
 class Game {
 
     keyboard = new Keyboard();
     loop = new MainLoop();
     mapManager = new MapManager();
     resourceLoadManager = new ResourceLoadManager();
+    actorsLib = new ActorsLib();
 
     actors = {};
     actorsIndex = 0;
@@ -2706,6 +2733,15 @@ class Game {
             function () {return self.getFullActorsList();});
     }
 
+    setupActorsLib() {
+        this.actorsLib.add('healthPotion', x =>
+            (new ItemActor()).setRenderable((new staticRenderabeItem('textures/UI/icons.png'))
+                .setAnimationName('potion.red')
+                .setScale(0.6))
+                .onPickup(x => x.health += 134, x => x instanceof BreakableActor)
+        );
+    }
+
     main() {
         this.startLoadingResources();
 
@@ -2730,6 +2766,7 @@ class Game {
 
         this.loop.addUpdateMethod(bind(this, 'frame'));
         this.loop.addRenderer(this.actorsRenderer);
+        this.setupActorsLib();
         this.loop.start();
 
     }
