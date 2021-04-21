@@ -766,13 +766,17 @@ class MapManager {
 
     setupNPCS(map) {
 
-        map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
+        /*map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
             .setRenderable((new RenderableCharacter(null,'textures/characters.png'))
                 .setStopAtFrame(1).setVariation(getRandomInt(0, 11)))
-            .on('death', x => {map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20)))); console.log('caaaal!');})
-        );
+            .on('death', x => {
+                map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
+                map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
+            }
+                )
+        );*/
 
-        map.addActor(game.actorsLib.get('healthPotion').setPos(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})));
+        map.addActor(game.actorsLib.get('club').setPos(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})));
     }
 
     moveToAMap(direction) {
@@ -1205,7 +1209,6 @@ class staticRenderabeItem extends RenderableItem{
 
 }
 
-
 class AnimatedRenderableItem extends RenderableItem{
     frames = [];
     animationTime = 1000;
@@ -1612,6 +1615,7 @@ class UIRenderer extends Renderer {
     variants = {};
     currVarriant = {};
     currentUIOptions = [];
+    currPos = 0;
 
     constructor(canvas, resource) {
         super(canvas);
@@ -1687,20 +1691,24 @@ class UIRenderer extends Renderer {
     }
 
     drawText() {
-        if(this.currentUIOptions.length <= 0) {
-            return;
-        }
 
-        this.context.font = "16px arcadeclassic";
+        if(this.currentUIOptions) {
 
-        for(let i = 0; i < this.currentUIOptions.length; i++) {
-            if(this.currentUIOptions[i].selected) {
-                this.context.fillStyle = "#ffffff";
-                this.context.fillText('>', 20, 526 + 16 * 2 + i * 16);
-                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
-            } else {
-                this.context.fillStyle = "#e2e2e2";
-                this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
+            if (this.currentUIOptions.length <= 0) {
+                return;
+            }
+
+            this.context.font = "16px arcadeclassic";
+
+            for (let i = 0; i < this.currentUIOptions.length; i++) {
+                if (this.currPos === i) {
+                    this.context.fillStyle = "#ffffff";
+                    this.context.fillText('>', 20, 526 + 16 * 2 + i * 16);
+                    this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
+                } else {
+                    this.context.fillStyle = "#e2e2e2";
+                    this.context.fillText(this.currentUIOptions[i].text, 32, 526 + 16 * 2 + i * 16);
+                }
             }
         }
 
@@ -1762,11 +1770,101 @@ class UIRenderer extends Renderer {
 
 }
 
+class ActorExtension {
+
+    #name;
+    #actor;
+
+    constructor(name) {
+        this.#name = name;
+    }
+
+    setActor(actor) {
+        this.#actor = actor;
+        return this;
+    }
+
+    get name() {
+        return this.#name;
+    }
+
+    get actor() {
+        return this.#actor;
+    }
+
+}
+
+class InventoryExtension extends ActorExtension {
+
+    inventorySize = 0;
+    items = [];
+
+    constructor(inventorySize) {
+        super('inventory');
+        this.inventorySize = inventorySize;
+    }
+
+    setInventorySize(inventorySize) {
+        this.inventorySize = inventorySize;
+        return this;
+    }
+
+    addToSlot(slotId, item) {
+        if(!Number.isInteger(slotId) || slotId < 0 || slotId >= this.inventorySize) {
+            return false;
+        }
+
+        if((this.items)[slotId]) {
+            return false;
+        } else {
+            (this.items)[slotId] = item;
+            return true;
+        }
+    }
+
+    getEmptySlotId() {
+        for(let i = 0; i < this.inventorySize; i++) {
+            if(!((this.items)[i])) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+    addToEmptySlot(item) {
+        return this.addToSlot(this.getEmptySlotId(), item);
+    }
+
+    getItemInSlot(slot) {
+
+        if(!Number.isInteger(slot) || slot < 0 || slot >= this.inventorySize) {
+            return null;
+        }
+
+        return this.items[slot];
+    }
+
+    removeItemFromSlot(slot) {
+        if(!Number.isInteger(slot) || slot < 0 || slot >= this.inventorySize) {
+            return null;
+        }
+
+        let item = this.items[slot];
+        this.items[slot] = null;
+        return item;
+    }
+
+    getItems() {
+        return this.items;
+    }
+
+}
 
 class Actor {
 
     x;
     y;
+    name;
 
     callbacks = {};
     on(callback, method, condition = x => true) {
@@ -1785,6 +1883,22 @@ class Actor {
         }
     }
 
+    extensions = {};
+    addExtension(extension) {
+        this.extensions[extension.name] = extension;
+        extension.setActor(this);
+    }
+
+    hasExtension(name) {
+        return this.getExtension(name) !== undefined;
+    }
+
+    getExtension(name) {
+        return this.extensions[name];
+    }
+
+
+
 
     #actorRenderer;
     renderable;
@@ -1793,12 +1907,22 @@ class Actor {
 
     #shouldBeRemoved = false;
 
+    setName(name) {
+        this.name = name;
+        return this;
+    }
+
     get shouldBeRemoved() {
         return this.#shouldBeRemoved;
     }
 
     markForRemoval() {
         this.#shouldBeRemoved = true;
+    }
+
+    resetRemovalMark() {
+        this.#shouldBeRemoved = false;
+        return this;
     }
 
 
@@ -1984,6 +2108,8 @@ class MovableActor extends Actor {
         } else if (this.checkBoxCollision(newScreenX, this.y)) {
             this.x = newScreenX;
             this.collidedWith = {x: this.x, y:this.y};
+        } else {
+            this.collidedWith = {x: newScreenX, y:newScreenY};
         }
 
 
@@ -2157,7 +2283,7 @@ class EnemyActor extends BreakableActor{
             let player = Object.values(item.game.getVisibleActorsInRadius(item, 1000)).find(x => x instanceof Player);
 
             if(player) {
-                item.lookAt = MakeDirVec(vecSub(player.getPos(), item.getPos()));
+                item.lookAt = vecNormalize(vecSub(player.getPos(), item.getPos()));
 
                 if (item.weaponTick === undefined) {
                     item.weaponTick = 0;
@@ -2278,6 +2404,7 @@ class Player extends BreakableActor {
         super(pos);
 
         let self = this;
+        this.addExtension(new InventoryExtension(8));
 
         this.renderable = new RenderablePlayer(this);
         this.keyboardControllable = true;
@@ -2416,8 +2543,14 @@ class ActorsLib {
         return this.lib[name]();
     }
 
-}
+    make(name) {
+        let actor = this.get(name);
+        if(actor !== null) {
+            game.addActorToCurrScreen(actor);
+        }
+    }
 
+}
 
 class Game {
 
@@ -2426,6 +2559,7 @@ class Game {
     mapManager = new MapManager();
     resourceLoadManager = new ResourceLoadManager();
     actorsLib = new ActorsLib();
+    dialogSystem = new DialogSystem();
 
     actors = {};
     actorsIndex = 0;
@@ -2491,42 +2625,15 @@ class Game {
         return Object.values(this.lastFullActors).filter(x => x.dialog && distanceXY(x.getPos(), game.player.getPos()) < 20);
     }
 
-    getDefaultUIOptions() {
-
-        let slf = this;
-        let playerCords = this.toGridSpace({x:this.player.x, y:this.player.y});
-
-        let playerLookAt = this.player.lookAt;
-
-        let backToGameAction = () => {slf.keyboard.gameState = 'game'; slf.uiBblock.currentUIOptions = [];};
-
-        let currDialog = [
-            {selected:true, text:'back to map', action: backToGameAction},
-            {text:'Dig', action:() => {slf.mapManager.currentGameScreen.setTileByVector(addXY(playerCords, playerLookAt), 0); backToGameAction();}},
-            {text:'summonSollie', action:() => {slf.addActorToCurrScreen((new EnemyActor(game.player.getPos())).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setDialog(new Dialog())); backToGameAction();}},
-            {text:'Inventory'},
-            {text:'Airstrike', action:() => {slf.addActorToCurrScreen((new PlaneActor({x:0,y:0})).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setNoclip(true).setMoveDirection({x:1, y:1})).setSpeed(400); backToGameAction();}},
-
-        ];
-
-        let closestDialogs = this.findClosestActorsDialogs().map(x => x.dialog.asDialogOption());
-        if(closestDialogs.length > 0) {
-            currDialog = currDialog.concat(closestDialogs);
-        }
-
-        return currDialog;
-
-    }
-
     reactToAction(initiator) {
         var priorityQueue = this.interactables.map(x => [x, x.isActivated(initiator)]).filter(x => x[1] !== false).sort((x,y) => Math.sign(x[1] - y[1]));
 
         if(priorityQueue.length > 0) {
             priorityQueue[0][0].interact();
         } else {
-            let slf = this;
-            this.uiBblock.currentUIOptions = this.getDefaultUIOptions();
+            //this.uiBblock.currentUIOptions = this.getDefaultUIOptions();
             this.keyboard.gameState = 'menu';
+            this.dialogSystem.selectCurrent();
         }
     }
 
@@ -2659,6 +2766,10 @@ class Game {
 
         this.lastFullActors = this.getFullActorsList();
 
+        this.uiBblock.currentUIOptions = this.dialogSystem.getCurrentDialog();
+        this.uiBblock.currPos = this.dialogSystem.getCurrentPos();
+
+
         for(let actorIndex in this.lastFullActors) {
             this.lastFullActors[actorIndex].frame(delta);
         }
@@ -2721,6 +2832,15 @@ class Game {
             .setGridSpacing({x:2, y:2})
             .addNamedFrame('health', {x:3, y:4})
             .addNamedFrame('potion.red', {x:0, y:3})
+            .addNamedFrame('club', {x:0, y:0})
+            .addNamedFrame('staff', {x:0, y:0})
+            .addNamedFrame('spikedClub', {x:0, y:0})
+            .addNamedFrame('greenStaff', {x:0, y:0})
+            .addNamedFrame('sparkStaff', {x:0, y:0})
+            .addNamedFrame('windStaff', {x:0, y:0})
+            .addNamedFrame('eyeStaff', {x:0, y:0})
+            .addNamedFrame('forstStaff', {x:0, y:0})
+            .addNamedFrame('necroStaff', {x:0, y:0})
         );
 
 
@@ -2742,6 +2862,34 @@ class Game {
                 .setScale(0.6))
                 .onPickup(x => x.health += 134, x => x instanceof BreakableActor)
         );
+
+
+        this.actorsLib.add('club', x =>
+            (new ItemActor()).setName('Spiked Club').setRenderable((new staticRenderabeItem('textures/UI/icons.png'))
+                .setAnimationName('spikedClub')
+                .setScale(0.6))
+                .on('pickup', (slf, x) => x.getExtension('inventory').addToEmptySlot(slf), (slf, x) => x.hasExtension('inventory'))
+        );
+
+
+        this.actorsLib.add('airstrike', x =>
+            ((new PlaneActor({x:0,y:0})).setRenderable((new RenderableCharacter(null,'textures/characters.png')).setStopAtFrame(1).setVariation(getRandomInt(0, 11))).setSpeed(400).setNoclip(true).setMoveDirection({x:1, y:1}))
+        );
+
+    }
+
+    setUpDefaultDialog() {
+
+        this.dialogSystem
+            .addCommonAction('closeDialog', x => {game.keyboard.gameState = 'game'; x.clearCurrent();})
+            .addDialogList((new DialogList('default'))
+                .addOption('Back to map', x => x.callAction('closeDialog'))
+                .addOption('Dig', x => {game.mapManager.currentGameScreen.setTileByVector(addXY(game.toGridSpace(game.player.getPos()), game.player.lookAt), 0); x.callAction('closeDialog');})
+                .addOption('Inventory', x => x.selectDialog('inventory'))
+                .addOption('Airstrike', x => {game.actorsLib.make('airstrike'); x.callAction('closeDialog');})
+            )
+            .addDialogList(new DialogList('inventory').fromOtherObject(game.player.getExtension('inventory').getItems()));
+
     }
 
     main() {
@@ -2756,9 +2904,9 @@ class Game {
 
         let self = this;
         this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/UI/denzi.png'));
-        this.keyboard.onCommandActive('selectUp', 'menu', () => self.uiBblock.shiftSelectedOption(-1));
-        this.keyboard.onCommandActive('selectDown', 'menu', () => self.uiBblock.shiftSelectedOption(1));
-        this.keyboard.onCommandActive('select', 'menu', () => self.uiBblock.selectCurrent());
+        this.keyboard.onCommandActive('selectUp', 'menu', () => self.dialogSystem.selectPrev());
+        this.keyboard.onCommandActive('selectDown', 'menu', () => self.dialogSystem.selectNext());
+        this.keyboard.onCommandActive('select', 'menu', () => self.dialogSystem.selectCurrent());
         this.addRenderer(this.uiBblock);
 
         this.player = new Player(this.toMapSpace(this.selectSpawnPoint()));
@@ -2769,6 +2917,7 @@ class Game {
         this.loop.addUpdateMethod(bind(this, 'frame'));
         this.loop.addRenderer(this.actorsRenderer);
         this.setupActorsLib();
+        this.setUpDefaultDialog();
         this.loop.start();
 
     }
