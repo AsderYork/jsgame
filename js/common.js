@@ -53,7 +53,7 @@ function shuffle(array) {
 }
 
 function angleFromVec(vec) {
-    return (vec.x < 0) * 180 + vec.y * 90 + (45 + 180 * (vec.x < 0)) * -vec.y * vec.x;
+    return Math.atan2(vec.y, vec.x)*180/Math.PI;
 }
 
 function getPointsOnLine(start, end) {
@@ -156,4 +156,9 @@ return {x: vec1.x - vec2.x, y: vec1.y - vec2.y};
 
 function MakeDirVec(vec) {
     return{x: vec.x > 0 ? 1 : (vec.x < 0 ? -1 : 0), y : vec.y > 0 ? 1 : (vec.y < 0 ? -1 : 0)};
+}
+
+function vecNormalize(vec) {
+    let len = distanceXY({x:0, y:0}, vec);
+    return {x:vec.x/len, y:vec.y/len};
 }
