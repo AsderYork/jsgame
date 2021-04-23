@@ -929,6 +929,7 @@ class Renderer {
     }
 
     clearArea() {
+        this.context.setTransform(1, 0, 0, 1, 0, 0);
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
@@ -1127,40 +1128,35 @@ class MapRenderer extends Renderer {
 class ContiniousMapRenderer extends Renderer{
 
     resource;
-    tiles = [];
     scale = 1;
     position = {x:0, y:0};
+    mapInterface;
 
-    tileset = {
-        1: {bg:'9', texture:'green.tl'},
-        2: {bg:'green.bg', texture:'green.tr'},
-        3: {bg:'green.bg', texture:'green.tm'},
-        4: {bg:'green.bg', texture:'green.twall.1'},
-        5: {bg:'green.bg', texture:'green.deep'},
-        6: {bg:'green.bg', texture:'green.edger'},
-        7: {bg:'green.bg', texture:'green.edgel'},
-        8: {bg:'green.bg', texture:'green.edget'},
-        9: {bg:'green.bg', texture:'green.rubble.1'},
-        10: {bg:'green.bg', texture:'green.rockl'},
-        11: {bg:'green.bg', texture:'green.rockm'},
-        12: {bg:'green.bg', texture:'green.rockr'},
-        13: {bg:'green.bg', texture:'green.bl'},
-        14: {bg:'green.bg', texture:'green.bm'},
-        15: {bg:'green.bg', texture:'green.br'},
-        16: {bg:'green.bg', texture:'green.ml'},
-        17: {bg:'green.bg', texture:'green.mm'},
-        18: {bg:'green.bg', texture:'green.mr'},
-
-
-
-    };
-
-    getTile(vec) {
-        return this.tiles?.[vec.x]?.[vec.y];
+    setMapInterface(mapInterface) {
+        this.mapInterface = mapInterface;
+        return this;
     }
 
+    get tileset() {
+        return this.mapInterface.getTileset();
+    }
+
+    getTilesetElem(elem) {
+        return this.mapInterface.getTilesetElem(elem);
+    }
+
+    get tiles() {
+        return this.mapInterface.getTiles();
+    }
+
+
+    getTile(vec) {
+        return this.mapInterface.getTile(vec);
+    }
+
+
     getMapSize() {
-        return vecMul(vecScale(this.resource.gridSize, this.scale), {x:this.tiles.length, y:this.tiles[0].length});
+        return vecMul(vecScale(this.resource.gridSize, this.scale), this.mapInterface.getMapSize());
     }
 
     getRenderStartPosition() {
@@ -1170,87 +1166,11 @@ class ContiniousMapRenderer extends Renderer{
     constructor(canvas, resource) {
         super(canvas);
         this.resource = resource;
+        return;
+    }
 
-        for(let x = 0; x < 100; x++) {
-            this.tiles.push([]);
-            for(let y = 0; y < 100; y++) {
-                this.tiles[x].push(getRandomInt(1, 3));
-            }
-        }
-
-        let paintbrush = new TerrainPaintbrush(this.tiles, this.tileset);
-
-        paintbrush
-            //.squareFloorPattern({x:3, y:0}, {x:7, y:1}, 'green')
-            .fill({x:0, y:0}, {x:10, y:10}, 'green', 'rubble.1')
-            .inset({x:2, y:0}, {x:7, y:3}, 'green')
-            .fill({x:3, y:2}, {x:7, y:2}, 'green', 'twall.1')
-
-
-
-
-        /*this.tiles[3][1] = 13;
-        this.tiles[4][1] = 14;
-        this.tiles[5][1] = 14;
-        this.tiles[6][1] = 14;
-        this.tiles[7][1] = 15;
-
-        this.tiles[3][0] = 16;
-        this.tiles[4][0] = 17;
-        this.tiles[5][0] = 17;
-        this.tiles[6][0] = 17;
-        this.tiles[7][0] = 18;*/
-
-
-        /*this.tiles[3][2] = 10;
-        this.tiles[4][2] = 4;
-        this.tiles[5][2] = 4;
-        this.tiles[6][2] = 4;
-        this.tiles[7][2] = 11;*/
-
-
-        this.tiles[2][0] = 6;
-        this.tiles[2][1] = 6;
-        this.tiles[2][2] = 6;
-        this.tiles[2][3] = 9;
-
-
-        this.tiles[8][0] = 7;
-        this.tiles[8][1] = 7;
-        this.tiles[8][2] = 7;
-        this.tiles[8][3] = 9;
-
-
-
-
-        this.tiles[3][3] = 9;
-        this.tiles[4][3] = 9;
-        this.tiles[5][3] = 9;
-        this.tiles[6][3] = 9;
-        this.tiles[7][3] = 9;
-
-
-        this.tiles[4][4] = 4;
-        this.tiles[5][4] = 4;
-        this.tiles[6][4] = 4;
-        this.tiles[4][5] = 5;
-        this.tiles[5][5] = 5;
-        this.tiles[6][5] = 5;
-
-
-        this.tiles[3][6] = 9;
-        this.tiles[4][6] = 8;
-        this.tiles[5][6] = 8;
-        this.tiles[6][6] = 8;
-        this.tiles[7][6] = 9;
-
-
-        this.tiles[3][4] = 6;
-        this.tiles[3][5] = 6;
-
-        this.tiles[7][4] = 7;
-        this.tiles[7][5] = 7;
-
+    getTilePosByWorldPos(vec) {
+        return vecApply(vecDiv(vec, vecScale(this.resource.gridSize, this.scale)), Math.floor);
     }
 
     render() {
@@ -1260,8 +1180,10 @@ class ContiniousMapRenderer extends Renderer{
             this.context.translate(-this.canvasShift.x, -this.canvasShift.y);
             let canvasSize = this.getCanvasSize();
 
-            for(let x = 0; x <= this.tiles[0].length; x++) {
-                for(let y = 0; y <= this.tiles.length; y++) {
+            const mapSize = this.mapInterface.getMapSize();
+
+            for(let x = 0; x <= mapSize.x; x++) {
+                for(let y = 0; y <= mapSize.y; y++) {
                     const currTilePos = {x:x, y:y}
                     const pictPos = vecMul(currTilePos, vecScale(this.resource.gridSize, this.scale));
                     const convShifted = vecSub(this.canvasShift, this.resource.gridSize);
@@ -1269,7 +1191,7 @@ class ContiniousMapRenderer extends Renderer{
                         continue;
                     }
 
-                    const tile = this.tileset[this.getTile(currTilePos)];
+                    const tile = this.getTilesetElem(this.getTile(currTilePos));
 
                     this.resource.drawFrameInContext(this.context, tile?.bg, pictPos, 0, this.scale);
                     this.resource.drawFrameInContext(this.context, tile?.texture, pictPos, 0, this.scale);
@@ -1284,7 +1206,6 @@ class ContiniousMapRenderer extends Renderer{
 
 
 }
-
 
 class RenderableItem {
 
@@ -1321,7 +1242,11 @@ class RenderableItem {
             this.renderer.context.rotate(angle * (Math.PI / 180));
             this.renderer.context.translate(-shiftx, -shifty);
             this.renderer.context.drawImage(this.resource.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
-            this.renderer.context.setTransform(1,0,0,1,0,0)
+
+            this.renderer.context.translate(shiftx, shifty);
+            this.renderer.context.rotate(-angle * (Math.PI / 180));
+            this.renderer.context.translate(-shiftx, -shifty);
+
         } else {
             this.renderer.context.drawImage(this.resource.get(), blockPos.x, blockPos.y, blockSize.x, blockSize.y, pictPos.x, pictPos.y, blockSize.x * scale, blockSize.y * scale);
         }
@@ -1754,9 +1679,8 @@ class ActorsRrenderer extends Renderer {
     }
 
     render(time) {
-        super.render();
         let actors = this.actorsGetter();
-
+        super.render();
         this.context.translate(-this.canvasShift.x, -this.canvasShift.y);
 
         for(let actorName in actors) {
@@ -2031,6 +1955,7 @@ class Actor {
 
     x;
     y;
+    z = 0;
     name;
 
     callbacks = {};
@@ -2233,12 +2158,8 @@ class MovableActor extends Actor {
     }
 
 
-    checkBoxCollision(screenCordX, screenCordY) {
-        return this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX, screenCordY)).traversable &&
-            this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX + this.size.x, screenCordY + this.size.y)).traversable &&
-            this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX, screenCordY + this.size.y)).traversable &&
-            this.#mapManager.currentGameScreen.getTileByVector(this.getMapCords(screenCordX + this.size.x, screenCordY)).traversable;
-
+    checkBoxCollision(vec) {
+        return !this.game.continiousMapController.terrainCollisions.isBoxCollide({x:vec.x, y:vec.y}, this.size, this.z);
     }
 
 
@@ -2262,21 +2183,22 @@ class MovableActor extends Actor {
             vector = this.getMoveVector();
         }
 
-        let newScreenX = this.x + (vector.x * this.#speed) * (delta / 1000);
-        let newScreenY = this.y + (vector.y * this.#speed) * (delta / 1000);
 
-        if (this.checkBoxCollision(newScreenX, newScreenY) || this.#noclip) {
-            this.x = newScreenX;
-            this.y = newScreenY;
+        let newScreenPos = addXY({x:this.x, y:this.y}, vecScale(vector, this.#speed * (delta / 1000)));
+
+
+        if (this.checkBoxCollision(newScreenPos) || this.#noclip) {
+            this.x = newScreenPos.x;
+            this.y = newScreenPos.y;
             this.collidedWith = null;
-        } else if (this.checkBoxCollision(this.x, newScreenY)) {
-            this.y = newScreenY;
+        } else if (this.checkBoxCollision({x:this.x, y:newScreenPos.y})) {
+            this.y = newScreenPos.y;
             this.collidedWith = {x: this.x, y:this.y};
-        } else if (this.checkBoxCollision(newScreenX, this.y)) {
-            this.x = newScreenX;
+        } else if (this.checkBoxCollision({x:newScreenPos.x, y:this.y})) {
+            this.x = newScreenPos.x;
             this.collidedWith = {x: this.x, y:this.y};
         } else {
-            this.collidedWith = {x: newScreenX, y:newScreenY};
+            this.collidedWith = newScreenPos;
         }
 
 
@@ -2727,6 +2649,7 @@ class Game {
     resourceLoadManager = new ResourceLoadManager();
     actorsLib = new ActorsLib();
     dialogSystem = new DialogSystem();
+    continiousMapController = new ContiniousMapController();
 
     actors = {};
     actorsIndex = 0;
@@ -2965,14 +2888,53 @@ class Game {
         this.resourceLoadManager.addResource(new TexturePackResource('textures/colony-grounds-ready.png')
             .setGridSize({x:16, y:16})
             .addNamedFrame('green.tl', {x:0, y:0})
-            .addNamedFrame('green.tm', {x:1, y:0})
             .addNamedFrame('green.tr', {x:2, y:0})
-            .addNamedFrame('green.ml', {x:0, y:1})
-            .addNamedFrame('green.mm', {x:1, y:1})
-            .addNamedFrame('green.mr', {x:2, y:1})
+            .addNamedFrame('green.tn', {x:1, y:0})
+            .addNamedFrame('green.ta', {x:6, y:1})
+
             .addNamedFrame('green.bl', {x:0, y:2})
-            .addNamedFrame('green.bm', {x:1, y:2})
             .addNamedFrame('green.br', {x:2, y:2})
+            .addNamedFrame('green.bn', {x:1, y:2})
+            .addNamedFrame('green.ba', {x:6, y:2})
+
+            .addNamedFrame('green.nl', {x:0, y:1})
+            .addNamedFrame('green.nr', {x:2, y:1})
+            .addNamedFrame('green.nn', {x:1, y:1})
+            .addNamedFrame('green.na', {x:3, y:1})
+
+            .addNamedFrame('green.al', {x:4, y:3})
+            .addNamedFrame('green.ar', {x:5, y:3})
+            .addNamedFrame('green.aa', {x:6, y:0})
+            .addNamedFrame('green.an', {x:4, y:0})
+
+
+            .addNamedFrame('green.gravelnl', {x:9, y:1})
+            .addNamedFrame('green.gravelnn', {x:10, y:1})
+            .addNamedFrame('green.gravelnr', {x:11, y:1})
+            .addNamedFrame('green.gravelna', {x:12, y:1})
+
+            .addNamedFrame('green.graveltl', {x:9, y:2})
+            .addNamedFrame('green.graveltn', {x:10, y:2})
+            .addNamedFrame('green.graveltr', {x:11, y:2})
+            .addNamedFrame('green.gravelta', {x:12, y:2})
+
+            .addNamedFrame('green.gravelal', {x:9, y:3})
+            .addNamedFrame('green.gravelan', {x:10, y:3})
+            .addNamedFrame('green.gravelar', {x:11, y:3})
+            .addNamedFrame('green.gravelaa', {x:12, y:3})
+
+
+            .addNamedFrame('green.gravelbl', {x:9, y:4})
+            .addNamedFrame('green.gravelbn', {x:10, y:4})
+            .addNamedFrame('green.gravelbr', {x:11, y:4})
+            .addNamedFrame('green.gravelba', {x:12, y:4})
+
+            .addNamedFrame('green.edge', {x:0, y:3})
+            .addNamedFrame('green.edgebl', {x:0, y:3})
+            .addNamedFrame('green.edgebn', {x:1, y:3})
+            .addNamedFrame('green.edgebr', {x:2, y:3})
+
+
             .addNamedFrame('green.twall.1', {x:0, y:3})
             .addNamedFrame('green.twall.2', {x:2, y:3})
             .addNamedFrame('green.twall.3', {x:3, y:3})
@@ -3098,16 +3060,29 @@ class Game {
 
     }
 
+    setupMapController() {
+
+        this.continiousMapController.addFloorTiles('green.', 'bg');
+        this.continiousMapController.addFloorTiles('green.gravel', 'bg');
+        this.continiousMapController.addTile('green.edge', 'bg', true);
+        this.continiousMapController.addTile('green.deep', 'bg', true);
+
+        this.continiousMapController.setMap(new continiousMap({x:100, y:100}));
+
+        this.background = new ContiniousMapRenderer(document.getElementById("backgroundCanvas"), this.resourceLoadManager.getResource('textures/colony-grounds-ready.png'));
+        this.continiousMapController.setRenderer(this.background);
+
+
+    }
+
     main() {
         this.startLoadingResources();
+        this.setupMapController();
 
         this.setupRenderers();
 
         this.teleportCooldown = new animatedLinearParam(0, 1, 25);
 
-        //this.background = new MapRenderer(document.getElementById("backgroundCanvas"), this.mapManager.currentGameScreen);
-
-        this.background = new ContiniousMapRenderer(document.getElementById("backgroundCanvas"), this.resourceLoadManager.getResource('textures/colony-grounds-ready.png'));
 
         this.addRenderer(this.background);
 
@@ -3119,7 +3094,7 @@ class Game {
         this.keyboard.onCommandActive('select', 'menu', () => self.dialogSystem.selectCurrent());
         this.addRenderer(this.uiBblock);
 
-        this.player = new Player(this.toMapSpace({x:10, y:10})).setNoclip(true);
+        this.player = new Player(this.toMapSpace({x:10, y:10}));
         this.addActor('player', this.player);
 
         this.markPortalsAsInteractables();
