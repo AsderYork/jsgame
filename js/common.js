@@ -15,6 +15,10 @@ function hashString(string) {
     return hash;
 }
 
+function clamp(min, max, val) {
+    return Math.min(Math.max(val, min), max);
+}
+
 function getRandomInt(min, max) {
     min = Math.ceil(min);
     max = Math.floor(max);
@@ -139,9 +143,36 @@ function vecScale(vec, mul) {
     return {x:vec.x * mul, y:vec.y * mul};
 }
 
+function vecnull() {
+    return {x:0, y:0};
+}
+
+function vecNegate(vec) {
+    return {x:-vec.x, y:-vec.y};
+}
+
+function vecClamp(min, max, vec) {
+    return {x:clamp(min.x, max.x, vec.x), y:clamp(min.y, max.y, vec.y)};
+}
+
+
+
 function vecMul(vec, mul) {
     return {x:vec.x * mul.x, y:vec.y * mul.y};
 }
+
+function vecDiv(vec, mul) {
+    return {x:vec.x / mul.x, y:vec.y / mul.y};
+}
+
+function vecModulo(vec, mul) {
+    return {x:vec.x % mul.x, y:vec.y % mul.y};
+}
+
+function vecApply(vec, predicate) {
+    return {x:predicate(vec.x), y:predicate(vec.y)};
+}
+
 
 function addXY(vec1, vec2) {
     return {x:vec1.x + vec2.x, y:vec1.y + vec2.y};
