@@ -921,6 +921,8 @@ class Renderer {
     canvas = null;
     textureImageReady = false;
 
+    canvasShift = {x:0, y:0};
+
     constructor(canvas) {
         this.canvas = canvas;
         this.context = canvas.getContext("2d");
@@ -934,6 +936,10 @@ class Renderer {
         this.clearArea();
     }
 
+    getCanvasSize() {
+        return {x:this.canvas.width, y: this.canvas.height};
+    }
+
 }
 
 class MapRenderer extends Renderer {
@@ -945,6 +951,8 @@ class MapRenderer extends Renderer {
 
     #texturepack = 'textures/colony-grounds-ready.png';
     #textureImage;
+
+    pos = vecnull();
 
     get mapdata() {
         return this.#mapdata;
@@ -1095,7 +1103,7 @@ class MapRenderer extends Renderer {
     }
 
     renderTile(x, y) {
-        const value = this.#mapdata.getTile(x, y);
+        const value = this.#mapdata.getTileByVector(vecSub({x:x, y:y}, this.pos));
 
         let canvasX = x * this.#tileWidth.getToVal();
         let canvasY = y * this.#tileHeight.getToVal();
@@ -1115,6 +1123,168 @@ class MapRenderer extends Renderer {
     }
 
 }
+
+class ContiniousMapRenderer extends Renderer{
+
+    resource;
+    tiles = [];
+    scale = 1;
+    position = {x:0, y:0};
+
+    tileset = {
+        1: {bg:'9', texture:'green.tl'},
+        2: {bg:'green.bg', texture:'green.tr'},
+        3: {bg:'green.bg', texture:'green.tm'},
+        4: {bg:'green.bg', texture:'green.twall.1'},
+        5: {bg:'green.bg', texture:'green.deep'},
+        6: {bg:'green.bg', texture:'green.edger'},
+        7: {bg:'green.bg', texture:'green.edgel'},
+        8: {bg:'green.bg', texture:'green.edget'},
+        9: {bg:'green.bg', texture:'green.rubble.1'},
+        10: {bg:'green.bg', texture:'green.rockl'},
+        11: {bg:'green.bg', texture:'green.rockm'},
+        12: {bg:'green.bg', texture:'green.rockr'},
+        13: {bg:'green.bg', texture:'green.bl'},
+        14: {bg:'green.bg', texture:'green.bm'},
+        15: {bg:'green.bg', texture:'green.br'},
+        16: {bg:'green.bg', texture:'green.ml'},
+        17: {bg:'green.bg', texture:'green.mm'},
+        18: {bg:'green.bg', texture:'green.mr'},
+
+
+
+    };
+
+    getTile(vec) {
+        return this.tiles?.[vec.x]?.[vec.y];
+    }
+
+    getMapSize() {
+        return vecMul(vecScale(this.resource.gridSize, this.scale), {x:this.tiles.length, y:this.tiles[0].length});
+    }
+
+    getRenderStartPosition() {
+        return vecClamp({x:0, y:0}, this.getMapSize(), this.position);
+    }
+
+    constructor(canvas, resource) {
+        super(canvas);
+        this.resource = resource;
+
+        for(let x = 0; x < 100; x++) {
+            this.tiles.push([]);
+            for(let y = 0; y < 100; y++) {
+                this.tiles[x].push(getRandomInt(1, 3));
+            }
+        }
+
+        let paintbrush = new TerrainPaintbrush(this.tiles, this.tileset);
+
+        paintbrush
+            //.squareFloorPattern({x:3, y:0}, {x:7, y:1}, 'green')
+            .fill({x:0, y:0}, {x:10, y:10}, 'green', 'rubble.1')
+            .inset({x:2, y:0}, {x:7, y:3}, 'green')
+            .fill({x:3, y:2}, {x:7, y:2}, 'green', 'twall.1')
+
+
+
+
+        /*this.tiles[3][1] = 13;
+        this.tiles[4][1] = 14;
+        this.tiles[5][1] = 14;
+        this.tiles[6][1] = 14;
+        this.tiles[7][1] = 15;
+
+        this.tiles[3][0] = 16;
+        this.tiles[4][0] = 17;
+        this.tiles[5][0] = 17;
+        this.tiles[6][0] = 17;
+        this.tiles[7][0] = 18;*/
+
+
+        /*this.tiles[3][2] = 10;
+        this.tiles[4][2] = 4;
+        this.tiles[5][2] = 4;
+        this.tiles[6][2] = 4;
+        this.tiles[7][2] = 11;*/
+
+
+        this.tiles[2][0] = 6;
+        this.tiles[2][1] = 6;
+        this.tiles[2][2] = 6;
+        this.tiles[2][3] = 9;
+
+
+        this.tiles[8][0] = 7;
+        this.tiles[8][1] = 7;
+        this.tiles[8][2] = 7;
+        this.tiles[8][3] = 9;
+
+
+
+
+        this.tiles[3][3] = 9;
+        this.tiles[4][3] = 9;
+        this.tiles[5][3] = 9;
+        this.tiles[6][3] = 9;
+        this.tiles[7][3] = 9;
+
+
+        this.tiles[4][4] = 4;
+        this.tiles[5][4] = 4;
+        this.tiles[6][4] = 4;
+        this.tiles[4][5] = 5;
+        this.tiles[5][5] = 5;
+        this.tiles[6][5] = 5;
+
+
+        this.tiles[3][6] = 9;
+        this.tiles[4][6] = 8;
+        this.tiles[5][6] = 8;
+        this.tiles[6][6] = 8;
+        this.tiles[7][6] = 9;
+
+
+        this.tiles[3][4] = 6;
+        this.tiles[3][5] = 6;
+
+        this.tiles[7][4] = 7;
+        this.tiles[7][5] = 7;
+
+    }
+
+    render() {
+        super.render();
+        if(this.resource.isReady) {
+
+            this.context.translate(-this.canvasShift.x, -this.canvasShift.y);
+            let canvasSize = this.getCanvasSize();
+
+            for(let x = 0; x <= this.tiles[0].length; x++) {
+                for(let y = 0; y <= this.tiles.length; y++) {
+                    const currTilePos = {x:x, y:y}
+                    const pictPos = vecMul(currTilePos, vecScale(this.resource.gridSize, this.scale));
+                    const convShifted = vecSub(this.canvasShift, this.resource.gridSize);
+                    if(pictPos.x < convShifted.x || pictPos.x > this.canvasShift.x + canvasSize.x || pictPos.y < convShifted || pictPos.y > this.canvasShift.y + canvasSize.y) {
+                        continue;
+                    }
+
+                    const tile = this.tileset[this.getTile(currTilePos)];
+
+                    this.resource.drawFrameInContext(this.context, tile?.bg, pictPos, 0, this.scale);
+                    this.resource.drawFrameInContext(this.context, tile?.texture, pictPos, 0, this.scale);
+                }
+            }
+
+            this.context.translate(this.canvasShift.x, this.canvasShift.y);
+
+        }
+
+    }
+
+
+}
+
 
 class RenderableItem {
 
@@ -1585,13 +1755,9 @@ class ActorsRrenderer extends Renderer {
 
     render(time) {
         super.render();
-
-        let blockPos = {x:8, y:11};
-        let blockSize = {x:16, y:20};
-
-        let scaleCoeff = 0.8;
-
         let actors = this.actorsGetter();
+
+        this.context.translate(-this.canvasShift.x, -this.canvasShift.y);
 
         for(let actorName in actors) {
             let actorsRenderable = actors[actorName].renderable;
@@ -1600,6 +1766,7 @@ class ActorsRrenderer extends Renderer {
             }
         }
 
+        this.context.translate(this.canvasShift.x, this.canvasShift.y);
         //this.context.drawImage(this.#textureImage, blockPos.x, blockPos.y, blockSize.x, blockSize.y, this.#x, this.#y, blockSize.x * scaleCoeff, blockSize.y * scaleCoeff);
 
 
@@ -2569,6 +2736,8 @@ class Game {
     uiBblock;
     actorsRenderer;
 
+    cameraPos = {x:0, y:0};
+
     lastFullActors = {};
 
     getFullActorsList()  {
@@ -2765,6 +2934,18 @@ class Game {
     frame(delta) {
 
         this.lastFullActors = this.getFullActorsList();
+        let scaledBorder = vecScale(this.actorsRenderer.getCanvasSize(), 0.5);
+        let moveWindow = vecScale(this.actorsRenderer.getCanvasSize(), 0.3);
+        let PlayerPos = game.player.getPos();
+
+        let dist = distanceXY(PlayerPos, this.cameraPos);
+        if(dist > moveWindow.x) {
+            this.cameraPos = addXY(vecScale(vecNormalize(vecSub(PlayerPos, this.cameraPos)), dist - moveWindow.x), this.cameraPos);
+        }
+
+
+        this.actorsRenderer.canvasShift = vecSub(vecClamp(scaledBorder, vecSub(this.background.getMapSize(), scaledBorder), this.cameraPos), scaledBorder);
+        this.background.canvasShift = this.actorsRenderer.canvasShift;
 
         this.uiBblock.currentUIOptions = this.dialogSystem.getCurrentDialog();
         this.uiBblock.currPos = this.dialogSystem.getCurrentPos();
@@ -2780,6 +2961,31 @@ class Game {
     startLoadingResources() {
         this.resourceLoadManager.addResource(new TexturePackResource('textures/adventurer.png'));
         this.resourceLoadManager.addResource(new TexturePackResource('textures/characters.png'));
+
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/colony-grounds-ready.png')
+            .setGridSize({x:16, y:16})
+            .addNamedFrame('green.tl', {x:0, y:0})
+            .addNamedFrame('green.tm', {x:1, y:0})
+            .addNamedFrame('green.tr', {x:2, y:0})
+            .addNamedFrame('green.ml', {x:0, y:1})
+            .addNamedFrame('green.mm', {x:1, y:1})
+            .addNamedFrame('green.mr', {x:2, y:1})
+            .addNamedFrame('green.bl', {x:0, y:2})
+            .addNamedFrame('green.bm', {x:1, y:2})
+            .addNamedFrame('green.br', {x:2, y:2})
+            .addNamedFrame('green.twall.1', {x:0, y:3})
+            .addNamedFrame('green.twall.2', {x:2, y:3})
+            .addNamedFrame('green.twall.3', {x:3, y:3})
+            .addNamedFrame('green.deep', {x:1, y:4})
+            .addNamedFrame('green.edger', {x:11, y:1})
+            .addNamedFrame('green.edgel', {x:9, y:1})
+            .addNamedFrame('green.edget', {x:10, y:3})
+            .addNamedFrame('green.bg', {x:8, y:0})
+            .addNamedFrame('green.rubble.1', {x:10, y:1})
+            .addNamedFrame('green.rockl', {x:9, y:0})
+            .addNamedFrame('green.rockm', {x:10, y:0})
+            .addNamedFrame('green.rockr', {x:11, y:0})
+        );
 
         this.resourceLoadManager.addResource(new TexturePackResource('textures/bullets.png')
             .addNamedFrames('redStarDeath', {x:17, y:17},[{x:136, y:9}, {x:155, y:9}, {x:172, y:9}])
@@ -2899,8 +3105,12 @@ class Game {
 
         this.teleportCooldown = new animatedLinearParam(0, 1, 25);
 
-        this.background = new MapRenderer(document.getElementById("backgroundCanvas"), this.mapManager.currentGameScreen);
+        //this.background = new MapRenderer(document.getElementById("backgroundCanvas"), this.mapManager.currentGameScreen);
+
+        this.background = new ContiniousMapRenderer(document.getElementById("backgroundCanvas"), this.resourceLoadManager.getResource('textures/colony-grounds-ready.png'));
+
         this.addRenderer(this.background);
+
 
         let self = this;
         this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/UI/denzi.png'));
@@ -2909,7 +3119,7 @@ class Game {
         this.keyboard.onCommandActive('select', 'menu', () => self.dialogSystem.selectCurrent());
         this.addRenderer(this.uiBblock);
 
-        this.player = new Player(this.toMapSpace(this.selectSpawnPoint()));
+        this.player = new Player(this.toMapSpace({x:10, y:10})).setNoclip(true);
         this.addActor('player', this.player);
 
         this.markPortalsAsInteractables();
@@ -2918,6 +3128,9 @@ class Game {
         this.loop.addRenderer(this.actorsRenderer);
         this.setupActorsLib();
         this.setUpDefaultDialog();
+
+        this.cameraPos = vecScale(this.actorsRenderer.getCanvasSize(), 0.5);
+
         this.loop.start();
 
     }
