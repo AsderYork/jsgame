@@ -1180,18 +1180,17 @@ class ContiniousMapRenderer extends Renderer{
             this.context.translate(-this.canvasShift.x, -this.canvasShift.y);
             let canvasSize = this.getCanvasSize();
 
+
             const mapSize = this.mapInterface.getMapSize();
+            const mapStartPos = this.getTilePosByWorldPos(this.canvasShift);
+            const convSize = this.getTilePosByWorldPos(canvasSize);
 
-            for(let x = 0; x <= mapSize.x; x++) {
-                for(let y = 0; y <= mapSize.y; y++) {
-                    const currTilePos = {x:x, y:y}
-                    const pictPos = vecMul(currTilePos, vecScale(this.resource.gridSize, this.scale));
-                    const convShifted = vecSub(this.canvasShift, this.resource.gridSize);
-                    if(pictPos.x < convShifted.x || pictPos.x > this.canvasShift.x + canvasSize.x || pictPos.y < convShifted || pictPos.y > this.canvasShift.y + canvasSize.y) {
-                        continue;
-                    }
+            for(let x = mapStartPos.x; x <= mapStartPos.x + convSize.x; x++) {
+                for(let y = mapStartPos.y; y <= mapStartPos.y + convSize.y; y++) {
 
-                    const tile = this.getTilesetElem(this.getTile(currTilePos));
+                    const tilepos = {x:x, y:y};
+                    const tile = this.getTilesetElem(this.getTile(tilepos));
+                    const pictPos = vecMul(tilepos, vecScale(this.resource.gridSize, this.scale));
 
                     this.resource.drawFrameInContext(this.context, tile?.bg, pictPos, 0, this.scale);
                     this.resource.drawFrameInContext(this.context, tile?.texture, pictPos, 0, this.scale);
@@ -2079,6 +2078,7 @@ class MovableActor extends Actor {
     #speed = 100;
     #keyboad;
     #noclip = false;
+    requireTerrain = true;
     #mapManager;
     moveDirection = {x:0, y:0};
     lookAt = {x:0, y:0};
@@ -2096,6 +2096,15 @@ class MovableActor extends Actor {
 
     constructor(pos) {
         super(pos);
+    }
+
+    setRequireTerrain(status) {
+        this.requireTerrain = status;
+        return this;
+    }
+
+    getRequireTerrain() {
+        return this.requireTerrain;
     }
 
     init(game) {
@@ -2159,7 +2168,7 @@ class MovableActor extends Actor {
 
 
     checkBoxCollision(vec) {
-        return !this.game.continiousMapController.terrainCollisions.isBoxCollide({x:vec.x, y:vec.y}, this.size, this.z);
+        return !this.game.continiousMapController.terrainCollisions.isBoxCollide({x:vec.x, y:vec.y}, this.size, this.z, this.requireTerrain);
     }
 
 
@@ -2221,6 +2230,7 @@ class ProjectileActor extends MovableActor{
         super(projectileAuthor.getPos());
         this.projectileAuthor = projectileAuthor;
         this.setMoveDirection(projectileAuthor.lookAt)
+            .setRequireTerrain(false)
             .setNoclip(false);
     }
 
@@ -3065,7 +3075,7 @@ class Game {
         this.continiousMapController.addFloorTiles('green.', 'bg');
         this.continiousMapController.addFloorTiles('green.gravel', 'bg');
         this.continiousMapController.addTile('green.edge', 'bg', true);
-        this.continiousMapController.addTile('green.deep', 'bg', true);
+        this.continiousMapController.addTile('green.deep', 'bg', false);
 
         this.continiousMapController.setMap(new continiousMap({x:100, y:100}));
 
