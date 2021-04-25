@@ -3,15 +3,24 @@ class terrainElement {
     edges = {left:false, right:false, top:false, bottom:false};
     corners = {topleft:false, topright:false, bottomleft:false, bottomright:false};
     group = 0;
+    extra = null;
 
     getGroup() {
         return this.group;
     }
-
     setGroup(group) {
         this.group = group;
         return this;
     }
+
+    setExtra(extra) {
+        this.extra = extra;
+    }
+
+    getExtra() {
+        return this.extra;
+    }
+
 
     setEdge(edge, val) {
         this.edges[edge] = val;
@@ -61,9 +70,9 @@ class TerrainElementsController {
 
     constructor(size) {
 
-        for(let y = 0; y < size; y++) {
+        for(let y = 0; y < size.y; y++) {
             this.terrainElements.push([]);
-            for(let x = 0; x < size; x++) {
+            for(let x = 0; x < size.x; x++) {
                 this.terrainElements[y][x] = new terrainElement();
             }
         }
@@ -104,11 +113,12 @@ class TerrainElementsController {
 
     }
 
-    alterElement(pos, group) {
+    alterElement(pos, group, extra) {
 
         let center = this.getElement(pos);
         if (center) {
             center.setGroup(group);
+            center.setExtra(extra);
             for(let side in this.opposites) {
                 let elem = this.getElement(addXY(pos, this.getShift(side)));
                 if (elem) {
@@ -127,28 +137,28 @@ class TerrainElementsController {
 
 class TerrainPaintbrush {
 
-    terrain = null;
+    mapInterface = null;
     tileset = null;
     terrainElementsController;
     features = {};
 
-    constructor(terrain, tileset) {
-        this.terrain = terrain;
+    constructor(mapInterface, tileset) {
+        this.mapInterface = mapInterface;
         this.tileset = tileset;
 
-        this.terrainElementsController = new TerrainElementsController(terrain.length);
+        this.terrainElementsController = new TerrainElementsController(this.mapInterface.getSize());
     }
 
-    alterTile(pos, group) {
-        this.terrainElementsController.alterElement(pos, group);
+    alterTile(pos, group, extra) {
+        this.terrainElementsController.alterElement(pos, group, extra);
         return this;
     }
 
-    fillTiles(start, end, group) {
+    fillTiles(start, end, group, extra) {
 
         for(let x = start.x; x < end.x; x++) {
             for(let y = start.y; y < end.y; y++) {
-                this.alterTile({x:x,y:y}, group);
+                this.alterTile({x:x,y:y}, group, extra);
             }
         }
         return this;
@@ -171,18 +181,18 @@ class TerrainPaintbrush {
         return this;
     }
 
-    defineStripeFeature(name, stripeGroup, bgGroup, stripePos = 'top') {
+    defineStripeFeature(name, stripeGroup, bgGroup, stripePos = 'top', stripeGroupExtra, bgGroupExtra) {
         this.features[name] = {
             isPossible: (start, end) => end.y - start.y >= 2,
             draw: (cntrl, start, end) => {
                 if(stripePos === 'top') {
                     cntrl
-                        .fillTiles(start, {x:end.x, y:start.y + 1}, stripeGroup)
-                        .fillTiles({x:start.x, y:start.y + 1}, end, bgGroup);
+                        .fillTiles(start, {x:end.x, y:start.y + 1}, stripeGroup, stripeGroupExtra)
+                        .fillTiles({x:start.x, y:start.y + 1}, end, bgGroup, bgGroupExtra);
                 } else if(stripePos === 'bottom') {
                     cntrl
-                        .fillTiles(start, {x:end.x, y:end.y - 1}, bgGroup)
-                        .fillTiles({x:start.x, y:end.y - 1}, end, stripeGroup);
+                        .fillTiles(start, {x:end.x, y:end.y - 1}, bgGroup, bgGroupExtra)
+                        .fillTiles({x:start.x, y:end.y - 1}, end, stripeGroup, stripeGroupExtra);
                 }
             },
         };
@@ -190,9 +200,11 @@ class TerrainPaintbrush {
     }
 
     render(style) {
-        for(let y = 0; y < this.terrain.length; y++) {
-            for(let x = 0; x < this.terrain[0].length; x++) {
-                const elem = this.terrainElementsController.getElement({x:x, y:y});
+        const mapSize = this.mapInterface.getSize();
+        for(let y = 0; y < mapSize.y; y++) {
+            for(let x = 0; x < mapSize.x; x++) {
+                const pos = {x:x, y:y};
+                const elem = this.terrainElementsController.getElement(pos);
                 const type = elem?.getType();
                 const texturename = !Number.isInteger(elem.getGroup()) ? elem.getGroup() + type : type;
                 let tileType = this.findTiletypeByAddr(style + '.' + texturename);
@@ -201,7 +213,13 @@ class TerrainPaintbrush {
                     tileType = this.findTiletypeByAddr(style + '.' + elem.getGroup());
                 }
 
-                this.terrain[y][x] = tileType;
+                let extra = elem.getExtra();
+                if(extra instanceof Function) {
+                    this.mapInterface.setTile(pos, tileType, extra(this.mapInterface.getTileData(pos)));
+                } else {
+                    this.mapInterface.setTile(pos, tileType, extra);
+                }
+
             }
         }
     }

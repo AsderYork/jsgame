@@ -9,7 +9,7 @@ class continiousMap {
         for(let y = 0; y < this.size.y; y++) {
             tiles.push([]);
             for(let x = 0; x < this.size.x; x++) {
-                tiles[y].push(val);
+                tiles[y].push((typeof val === 'object' && val !== null) ? Object.assign({}, val) : val);
             }
         }
         return tiles;
@@ -35,9 +35,14 @@ class continiousMap {
         return this.tilesExtra?.[vec.y]?.[vec.x]
     }
 
-    setTile(vec, val) {
+    setTile(vec, val, extra) {
         if(this.getTile(vec) !== undefined) {
-            this.tiles[y][x] = val;
+            this.tiles[vec.y][vec.x] = val;
+
+            if(extra !== undefined) {
+                this.tilesExtra[vec.y][vec.x] = extra;
+            }
+
         }
     }
 
@@ -52,22 +57,28 @@ class TerrainCollisions {
         this.continiousMapController = continiousMapController;
     }
 
-    isTileBlocking(vec, level) {
+    isTileBlocking(vec, level, requireTerrain) {
 
         let data = this.continiousMapController.getTileDataByWorldPos(vec);
         if(data) {
-            return data?.tile?.collide || data.level !== level;
+
+            if(data.level < 0) {
+            }
+
+            return ((data.level === level) && data?.tile?.collide) ||
+             ((data.level > level) || 
+             ((data.level < level) && requireTerrain));
         }
         return true;
 
     }
 
-    isBoxCollide(pos, size, level = 0) {
+    isBoxCollide(pos, size, level = 0, requireTerrain = false) {
 
-        return this.isTileBlocking(pos, level)
-            || this.isTileBlocking(addXY(pos, size), level)
-            || this.isTileBlocking(addXY(pos, {x:0, y:size.y}), level)
-            || this.isTileBlocking(addXY(pos, {x:size.x, y:0}), level);
+        return this.isTileBlocking(pos, level, requireTerrain)
+            || this.isTileBlocking(addXY(pos, size), level, requireTerrain)
+            || this.isTileBlocking(addXY(pos, {x:0, y:size.y}), level, requireTerrain)
+            || this.isTileBlocking(addXY(pos, {x:size.x, y:0}), level, requireTerrain);
 
     }
 
@@ -130,13 +141,12 @@ class ContiniousMapController {
     setMap(map) {
         this.currentMap = map;
 
-
-        let paintbrush = new TerrainPaintbrush(map.tiles, this.tileSet);
+        let paintbrush = new TerrainPaintbrush(map, this.tileSet);
 
         paintbrush
             .glueGroups('gravel', 'edge')
-            .defineStripeFeature('pit', 'edge', 'deep', 'top')
-            .defineStripeFeature('platform', 'edge', 1, 'bottom')
+            .defineStripeFeature('pit', 'edge', 'deep', 'top', x =>  {return {level: x.level - 1, noterrain:false}; }, x =>  {return {level: x.level - 1, noterrain:false}; })
+            .defineStripeFeature('platform', 'edge', 1, 'bottom', undefined, x => {return {level:x.level + 1};})
             .fillTiles({x:0,y:0}, {x:100, y:100}, 'gravel')
             .drawFeature('platform', {x:20, y:14}, {x:26, y:18})
             .fillTiles({x:20,y:18}, {x:26, y:20}, 'gravel')
