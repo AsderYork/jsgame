@@ -725,197 +725,6 @@ class GameMapScreen {
 
 }
 
-class MapManager {
-
-    static mapShift = {left:{x:(-1), y:0}, right:{x:1, y:0}, up:{x:0, y:1}, down:{x:0, y:(-1)}};
-
-    currentGameScreen;
-
-    tiledMaps = {};
-    currMapCoords = {x:0, y:0};
-
-
-    getMap(cords) {
-
-        if(this.tiledMaps[cords.x] === undefined) {
-            this.tiledMaps[cords.x] = [];
-        }
-
-        return this.tiledMaps[cords.x][cords.y];
-
-    }
-
-    setMap(cords, map) {
-        if(this.tiledMaps[cords.x] === undefined) {
-            this.tiledMaps[cords.x] = [];
-        }
-
-        this.tiledMaps[cords.x][cords.y] = map;
-    }
-
-    getNearMap(direction, cords) {
-        return this.getMap(addXY(cords, MapManager.mapShift[direction]));
-    }
-
-
-    getShiftedCords(cords, direction) {
-        let mapShifts = {left:{x:(-1), y:0}, right:{x:1, y:0}, up:{x:0, y:1}, down:{x:0, y:(-1)}};
-        return {x:cords.x + mapShifts[direction].x, y:cords.y + mapShifts[direction].y};
-
-    }
-
-    setupNPCS(map) {
-
-        /*map.addActor((new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
-            .setRenderable((new RenderableCharacter(null,'textures/characters.png'))
-                .setStopAtFrame(1).setVariation(getRandomInt(0, 11)))
-            .on('death', x => {
-                map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
-                map.addActor(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
-            }
-                )
-        );*/
-
-        map.addActor(game.actorsLib.get('club').setPos(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})));
-    }
-
-    moveToAMap(direction) {
-
-        let nextMapCords = this.getShiftedCords(this.currMapCoords, direction);
-
-        let existingMap = this.getMap(nextMapCords);
-
-        if(existingMap !== undefined) {
-            this.currentGameScreen = existingMap;
-        } else {
-            this.currentGameScreen = this.generateMapOnPosition(nextMapCords);
-            //this.setupNPCS();
-            this.setMap(nextMapCords, this.currentGameScreen);
-        }
-        this.currMapCoords = nextMapCords;
-
-    }
-
-    screenVariations = [
-        [
-            [1, 1, 1, 1, 1, 1],
-            [1, 1, 0, 0, 1, 1],
-            [2, 0, 0, 0, 0, 1],
-            [2, 0, 0, 0, 0, 1],
-            [1, 1, 0, 0, 1, 1],
-            [1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1],
-        ],
-
-    ]
-
-    generateBoundries(map, oldMap) {
-
-        let directions = {
-            'left':'right',
-            'right':'left',
-            'up':'down',
-            'down':'up',
-        }
-
-        if(oldMap.teleportDirection) {
-            let filteredDirections = {};
-            filteredDirections[oldMap.teleportDirection] = directions[oldMap.teleportDirection];
-            directions = filteredDirections;
-        }
-
-        for(let direction in directions) {
-
-            for(let i = 0; i < map.getMapLengthByDirection(); i++) {
-                let oldBorderPos = oldMap.getTileCordsByDirection(direction, i);
-                let newBorderPos = map.getTileCordsByDirection(directions[direction], i);
-
-                map.setTileByVector(newBorderPos, oldMap.getTileIndex(oldBorderPos));
-            }
-
-        }
-
-        return map;
-
-    }
-
-    generate(source, skipBoundries = false) {
-        let result = new GameMapScreen(source.tiles);
-
-        result.fill(1);
-
-        if(!skipBoundries) {
-            result = this.generateBoundries(result, source);
-        }
-
-        result.findRoadEntries();
-
-        MapBuilder.make(result)
-            .addRoadOnUnoccupiedBorder(getRandomInt(1, 3))
-            .addRoadOnUnoccupiedBorder(getRandomInt(1, 3))
-            .connectRandomRoads(getRandomInt(1, 3))
-            .addIsland(getRandomInt(5, 13))
-            .connectLastTwo(getRandomInt(1, 6));
-
-
-        return result;
-
-    }
-
-    resetMapFromCurrent(skipBoundries = false) {
-        this.currentGameScreen = this.generate(this.currentGameScreen, skipBoundries);
-    }
-
-    getMapsAround(position) {
-
-        let result = {};
-        for(let direction of GameMapScreen.directions) {
-            let map = this.getNearMap(direction, position);
-            if(map) {
-                result[direction] = map;
-            }
-        }
-
-        return result;
-
-
-    }
-
-    generateMapOnPosition(position) {
-
-        let self = this;
-
-        return MapBuilder.make(GameMapScreen.makeEmptyMap(this.currentGameScreen.size, 0))
-            .setMapsAround(this.getMapsAround(position))
-            .copyBoundriesOnOpposites()
-            .makeNoLessRoadsidesThen(4, {min:1,max:3})
-            .connectRandomRoads(getRandomInt(1, 3))
-            .addIsland(getRandomInt(5, 13))
-            .connectLastTwo(getRandomInt(1, 6))
-            .chance(1, (x) => self.setupNPCS(x))
-            .get();
-
-
-    }
-
-    constructor() {
-
-        this.currentGameScreen = GameMapScreen.makeEmptyMap({x:32, y:32});
-
-        this.resetMapFromCurrent(true);
-        this.setMap(this.currMapCoords, this.currentGameScreen);
-    }
-
-    isPointVisible(origin, target) {
-
-        let points = getPointsOnLine(origin, target);
-        let self = this;
-        return points.every(x => self.currentGameScreen.getTileByVector(x).traversable);
-    }
-
-}
-
 class Renderer {
     context = null;
     canvas = null;
@@ -1128,6 +937,7 @@ class MapRenderer extends Renderer {
 class ContiniousMapRenderer extends Renderer{
 
     resource;
+    extraResources = [];
     scale = 1;
     position = {x:0, y:0};
     mapInterface;
@@ -1173,6 +983,10 @@ class ContiniousMapRenderer extends Renderer{
         return vecApply(vecDiv(vec, vecScale(this.resource.gridSize, this.scale)), Math.floor);
     }
 
+    addExtraResoure(resource) {
+        this.extraResources.push(resource);
+    }
+
     render() {
         super.render();
         if(this.resource.isReady) {
@@ -1185,15 +999,26 @@ class ContiniousMapRenderer extends Renderer{
             const mapStartPos = this.getTilePosByWorldPos(this.canvasShift);
             const convSize = this.getTilePosByWorldPos(canvasSize);
 
+            const resources = [this.resource].concat(this.extraResources);
+
             for(let x = mapStartPos.x; x <= mapStartPos.x + convSize.x; x++) {
                 for(let y = mapStartPos.y; y <= mapStartPos.y + convSize.y; y++) {
 
                     const tilepos = {x:x, y:y};
                     const tile = this.getTilesetElem(this.getTile(tilepos));
-                    const pictPos = vecMul(tilepos, vecScale(this.resource.gridSize, this.scale));
+                    const tileAnims = [tile?.bg, tile?.texture];
 
-                    this.resource.drawFrameInContext(this.context, tile?.bg, pictPos, 0, this.scale);
-                    this.resource.drawFrameInContext(this.context, tile?.texture, pictPos, 0, this.scale);
+                    for(const tileAnim of tileAnims) {
+                        for (const resource of resources) {
+                            if(resource.animationExists(tileAnim)) {
+                                const pictPos = vecMul(tilepos, vecScale(resource.gridSize, this.scale));
+                                resource.drawFrameInContext(this.context, tileAnim, pictPos, 0, this.scale);
+                            }
+                        }
+                    }
+
+
+
                 }
             }
 
@@ -1565,6 +1390,10 @@ class TexturePackResource extends ManagedResource {
 
     findAnimationsByNameStart(nameStart) {
         return Object.keys(this.animations).filter(x => x.startsWith(nameStart));
+    }
+
+    animationExists(anim) {
+        return anim in this.animations;
     }
 
     setGridSize(gridSize) {
@@ -2037,7 +1866,7 @@ class Actor {
         if(this.renderable) {
             this.renderable.init(game.actorsRenderer);
         }
-
+        return this;
     }
 
     setRenderable(renderable) {
@@ -2079,17 +1908,13 @@ class MovableActor extends Actor {
     #keyboad;
     #noclip = false;
     requireTerrain = true;
-    #mapManager;
     moveDirection = {x:0, y:0};
     lookAt = {x:0, y:0};
     size = {x:8, y:10};
     collidedWith = null;
 
-
     set speed(speed) {this.#speed = speed;}
     get speed() {return this.#speed;}
-
-    set mapManager(mapManager) {this.#mapManager = mapManager;}
 
     set keyboard(keyboard) {this.#keyboad = keyboard;}
     get keyboard() {return this.#keyboad;}
@@ -2111,7 +1936,7 @@ class MovableActor extends Actor {
         super.init(game);
 
         this.keyboard = game.keyboard;
-        this.mapManager = game.mapManager;
+        return this;
     }
 
     setMoveDirection(moveDirection) {
@@ -2153,24 +1978,9 @@ class MovableActor extends Actor {
 
     }
 
-    getMapCords(x, y) {
-
-        return {
-            x: Math.floor((x === undefined ? this.x : x) / (this.actionRenderer.canvas.width / this.#mapManager.currentGameScreen.width)),
-            y: Math.floor((y === undefined ? this.y : y) / (this.actionRenderer.canvas.height / this.#mapManager.currentGameScreen.height)),
-        }
-
-    }
-
-    getMapCordsVec(vec) {
-        return this.getMapCords(vec.x, vec.y);
-    }
-
-
     checkBoxCollision(vec) {
         return !this.game.continiousMapController.terrainCollisions.isBoxCollide({x:vec.x, y:vec.y}, this.size, this.z, this.requireTerrain);
     }
-
 
     checkBoxCollisionVector(pos, size) {
 
@@ -2179,10 +1989,10 @@ class MovableActor extends Actor {
         return selfPos.x + this.size.x > pos.x && pos.x + size.x > selfPos.x && selfPos.y + this.size.y > pos.y && pos.y + size.y > selfPos.y;
     }
 
-
     frame(delta) {
 
-        if(Math.abs(this.x) > 1000 || Math.abs(this.y) > 1000) {
+        let mapSize = this.game.background.getMapSize();
+        if(Math.abs(this.x) > mapSize.x || Math.abs(this.y) > mapSize.y) {
             this.markForRemoval();
         }
 
@@ -2291,7 +2101,6 @@ class ProjectileActor extends MovableActor{
             }
 
             if(this.collidedWith !== null) {
-                this.game.mapManager.currentGameScreen.setTileByVector(this.getMapCordsVec(this.collidedWith), 0);
                 this.goToInactiveState(null);
             }
 
@@ -2345,7 +2154,7 @@ class BreakableActor extends MovableActor {
 
     init(game) {
         super.init(game);
-
+        return this;
     }
 
     frame(delta) {
@@ -2365,7 +2174,6 @@ class EnemyActor extends BreakableActor{
 
         this.stateMachine = new StateMachine();
         this.stateMachine.addState(new StateMachineState('idle', (item, delta, state) => {
-
             if(state.target === undefined || item.collidedWith !== null || (distanceXY(item.getPos(), state.target) < 5)) {
                 state.target = addXY(item.getPos(), getRandomVec(30));
                 item.setMoveDirection({x:0, y:0});
@@ -2375,11 +2183,11 @@ class EnemyActor extends BreakableActor{
             } else {
                 item.setMoveDirection(MakeDirVec(vecSub(state.target, item.getPos())));
             }
-        }, {attack: (item, delta, state) => {return true;}}));
+        }, {attack: (item, delta, state) => item.game.getVisibleActorsInRadius(item, 300).find(x => x instanceof Player) !== undefined}));
 
         this.stateMachine.addState(new StateMachineState('attack', (item, delta, state) => {
 
-            let player = Object.values(item.game.getVisibleActorsInRadius(item, 1000)).find(x => x instanceof Player);
+            let player = item.game.getVisibleActorsInRadius(item, 300).find(x => x instanceof Player);
 
             if(player) {
                 item.lookAt = vecNormalize(vecSub(player.getPos(), item.getPos()));
@@ -2402,11 +2210,23 @@ class EnemyActor extends BreakableActor{
                 } else {
                     item.setMoveDirection({x:0, y:0});
                 }
+                item.timeWithoutPlayer = 0;
+            } else {
+                if(item.timeWithoutPlayer === undefined) {
+                    item.timeWithoutPlayer = 0;
+                }
+                item.timeWithoutPlayer += delta;
 
+                if(item.timeWithoutPlayer > 500) {
+                    return 'idle';
+                }
             }
+
+
 
         }));
 
+        return this;
 
     }
 
@@ -2427,6 +2247,7 @@ class ItemActor extends MovableActor{
 
     init(game) {
         super.init(game);
+        return this;
     }
 
     onPickup(pickupCallback, condition = x => true) {
@@ -2481,7 +2302,7 @@ class PlaneActor extends BreakableActor{
             }
 
         }));
-
+        return this;
 
     }
 
@@ -2493,7 +2314,6 @@ class PlaneActor extends BreakableActor{
 
 
 }
-
 
 class Player extends BreakableActor {
 
@@ -2645,7 +2465,7 @@ class ActorsLib {
     make(name) {
         let actor = this.get(name);
         if(actor !== null) {
-            game.addActorToCurrScreen(actor);
+            return game.addActorToCurrScreen(actor);
         }
     }
 
@@ -2655,7 +2475,6 @@ class Game {
 
     keyboard = new Keyboard();
     loop = new MainLoop();
-    mapManager = new MapManager();
     resourceLoadManager = new ResourceLoadManager();
     actorsLib = new ActorsLib();
     dialogSystem = new DialogSystem();
@@ -2674,17 +2493,8 @@ class Game {
     lastFullActors = {};
 
     getFullActorsList()  {
-        let result = {};
-        if(this?.mapManager?.currentGameScreen?.actors) {
-
-            for(let actorId in this.mapManager.currentGameScreen.actors) {
-                if(this.mapManager.currentGameScreen.actors[actorId].shouldBeRemoved) {
-                    delete this.mapManager.currentGameScreen.actors[actorId];
-                }
-            }
-
-            result = Object.assign(result, this.mapManager.currentGameScreen.actors);
-        }
+        let result = this.continiousMapController?.getActors().map(x => x);
+        result.forEach(x => {if(x.shouldBeRemoved) {this.continiousMapController.removeActor(x);}});
 
         for(let actorId in this.actors) {
             if(this.actors[actorId].shouldBeRemoved) {
@@ -2695,19 +2505,15 @@ class Game {
         return Object.assign(result, this.actors);
     }
 
-    teleportCooldown;
-
     getVisibleActorsInRadius(targetActor, radius) {
 
-        let visibleActors = {};
+        let visibleActors = [];
         let pos = targetActor.getPos();
-        let mapCords = targetActor.getMapCords();
 
         for(let index in this.lastFullActors) {
             let actorPos = this.lastFullActors[index].getPos();
-            let actorMapPos = this.lastFullActors[index].getMapCords();
-            if(targetActor !== this.lastFullActors[index] && distanceXY(actorPos, pos) <= radius && this.mapManager.isPointVisible(mapCords, actorMapPos)) {
-                visibleActors[index] = this.lastFullActors[index];
+            if(targetActor !== this.lastFullActors[index] && distanceXY(actorPos, pos) <= radius) {
+                visibleActors.push(this.lastFullActors[index]);
             }
         }
         return visibleActors;
@@ -2717,14 +2523,6 @@ class Game {
     addRenderer(renderer) {
         this.loop.addRenderer(renderer);
         return this;
-    }
-
-    addInteractable(interactable) {
-        this.interactables.push(interactable);
-    }
-
-    findClosestActorsDialogs() {
-        return Object.values(this.lastFullActors).filter(x => x.dialog && distanceXY(x.getPos(), game.player.getPos()) < 20);
     }
 
     reactToAction(initiator) {
@@ -2759,49 +2557,14 @@ class Game {
     }
 
     addActorToCurrScreen(actor, name = undefined) {
+        return this?.continiousMapController?.addActor(actor)?.init(this);
+    }
 
-        if(name === undefined) {
-            name = this.actorsIndex++;
+    toMapSpace(vec) {
+        if(vec && vec.x !== undefined && vec.y !== undefined) {
+            return this.background.getTilePosByWorldPos(vec);
         }
-
-        if(this?.mapManager?.currentGameScreen?.actors) {
-            this.mapManager.currentGameScreen.actors[name] = actor;
-            actor.init(this);
-            return actor;
-        }
-
         return null;
-
-    }
-
-    selectSpawnPoint() {
-
-        const avaliableSpawns = Object.values(game.mapManager.currentGameScreen.gameMapScreenRoadEntry).flat();
-
-        if(avaliableSpawns) {
-            const spawnPoints = avaliableSpawns.map(x => x.tiles).flat();
-
-            let EntryPoint = spawnPoints.filter(x => this.mapManager.currentGameScreen.getTileIndex(x) === 5);
-            if(EntryPoint.length > 0) {
-                this.mapManager.currentGameScreen.setTileByVector(EntryPoint[0], 2);
-                return EntryPoint[0];
-            }
-
-            return spawnPoints.length > 0 ? getRandomElement(spawnPoints) : {x:0, y:0};
-        }
-        return {x:0, y:0};
-    }
-
-    toMapSpace(vect) {
-
-        if(vect && vect.x !== undefined && vect.y != undefined) {
-
-            return {
-                x: (this.background.canvas.width / this.mapManager.currentGameScreen.width) * vect.x,
-                y: (this.background.canvas.height / this.mapManager.currentGameScreen.height) * vect.y,
-            };
-        } return null;
-
     }
 
     toGridSpace(vect) {
@@ -2813,57 +2576,6 @@ class Game {
 
     }
 
-    findOpositePoint(direction, vector) {
-
-        let directions = {
-            left: {x: this.mapManager.currentGameScreen.width - 1, y:0},
-            right: {x: (-(this.mapManager.currentGameScreen.width - 1)), y:0},
-            up: {x: 0, y:this.mapManager.currentGameScreen.height - 1},
-            down: {x: 0, y:(-(this.mapManager.currentGameScreen.height - 1))},
-        };
-
-        let result = {x:(vector.x + directions[direction].x) % this.mapManager.currentGameScreen.width, y:(vector.y + directions[direction].y) % this.mapManager.currentGameScreen.height};
-
-        return result;
-
-    }
-
-    nextMap(teleportPoint) {
-        if(this.teleportCooldown.get() >= 1) {
-
-            this.interactables = [];
-
-            let tpDirs = Object.entries(game.mapManager.currentGameScreen.gameMapScreenRoadEntry).map(dir => [dir[0], dir[1].map(x => x.tiles).flat()]).filter(x => x[1].filter(a => a.x === teleportPoint.x && a.y === teleportPoint.y).length > 0);
-            if(tpDirs.length > 0) {
-                this.mapManager.currentGameScreen.teleportDirection = tpDirs[0][0];
-            }
-
-            this.teleportCooldown.reset();
-            this.mapManager.moveToAMap(this.mapManager.currentGameScreen.teleportDirection);
-            this.markPortalsAsInteractables();
-            this.player.setPos(this.toMapSpace(this.findOpositePoint(tpDirs[0][0], teleportPoint)));
-            this.background.resetMapData(this.mapManager.currentGameScreen);
-            this.initializeMapActors(this.mapManager.currentGameScreen);
-
-
-        }
-    }
-
-    initializeMapActors(map) {
-        let self = this;
-        Object.values(map.actors).forEach(x => self.initActor(x));
-    }
-
-    markPortalsAsInteractables() {
-
-        let portals = Object.values(game.mapManager.currentGameScreen.gameMapScreenRoadEntry).flat().map(x => x['tiles']).flat();
-
-        for(let portal of portals) {
-            this.addInteractable(new interactableTerrain_Portal(this, portal, 1));
-        }
-
-    }
-
     frame(delta) {
 
         this.lastFullActors = this.getFullActorsList();
@@ -2871,10 +2583,8 @@ class Game {
         let moveWindow = vecScale(this.actorsRenderer.getCanvasSize(), 0.3);
         let PlayerPos = game.player.getPos();
 
-        let dist = distanceXY(PlayerPos, this.cameraPos);
-        if(dist > moveWindow.x) {
-            this.cameraPos = addXY(vecScale(vecNormalize(vecSub(PlayerPos, this.cameraPos)), dist - moveWindow.x), this.cameraPos);
-        }
+        let dist = vecSub(PlayerPos, this.cameraPos);
+        this.cameraPos = vecApply(addXY(this.cameraPos, vecApply(dist, (v, el) => Math.abs(v) > moveWindow[el] ? Math.sign(v) * (Math.abs(v) - moveWindow[el]) : 0)), Math.round);
 
 
         this.actorsRenderer.canvasShift = vecSub(vecClamp(scaledBorder, vecSub(this.background.getMapSize(), scaledBorder), this.cameraPos), scaledBorder);
@@ -2888,12 +2598,15 @@ class Game {
             this.lastFullActors[actorIndex].frame(delta);
         }
 
-        this.teleportCooldown.animate(delta);
     }
 
     startLoadingResources() {
         this.resourceLoadManager.addResource(new TexturePackResource('textures/adventurer.png'));
         this.resourceLoadManager.addResource(new TexturePackResource('textures/characters.png'));
+
+        this.resourceLoadManager.addResource(new TexturePackResource('textures/colony-other-ready.png'))
+            .setGridSize({x:16, y:16})
+            .addNamedFrame('green.rock', {x:10, y:6})
 
         this.resourceLoadManager.addResource(new TexturePackResource('textures/colony-grounds-ready.png')
             .setGridSize({x:16, y:16})
@@ -3041,6 +2754,16 @@ class Game {
                 .onPickup(x => x.health += 134, x => x instanceof BreakableActor)
         );
 
+        this.actorsLib.add('enemy', x => (new EnemyActor(game.toMapSpace({x:getRandomInt(1, 15), y:getRandomInt(1,15)})))
+            .setRenderable((new RenderableCharacter(null,'textures/characters.png'))
+                .setStopAtFrame(1).setVariation(getRandomInt(0, 11)))
+            .on('death', x => {
+                    game.addActorToCurrScreen(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
+                    game.addActorToCurrScreen(game.actorsLib.get('healthPotion').setPos(addXY(x.getPos(), getRandomVec(20))));
+                }
+            )
+        );
+
 
         this.actorsLib.add('club', x =>
             (new ItemActor()).setName('Spiked Club').setRenderable((new staticRenderabeItem('textures/UI/icons.png'))
@@ -3062,9 +2785,9 @@ class Game {
             .addCommonAction('closeDialog', x => {game.keyboard.gameState = 'game'; x.clearCurrent();})
             .addDialogList((new DialogList('default'))
                 .addOption('Back to map', x => x.callAction('closeDialog'))
-                .addOption('Dig', x => {game.mapManager.currentGameScreen.setTileByVector(addXY(game.toGridSpace(game.player.getPos()), game.player.lookAt), 0); x.callAction('closeDialog');})
                 .addOption('Inventory', x => x.selectDialog('inventory'))
                 .addOption('Airstrike', x => {game.actorsLib.make('airstrike'); x.callAction('closeDialog');})
+                .addOption('Enemy', x => {let q = game.actorsLib.make('enemy').setPos({x:10, y:10}); x.callAction('closeDialog');})
             )
             .addDialogList(new DialogList('inventory').fromOtherObject(game.player.getExtension('inventory').getItems()));
 
@@ -3072,14 +2795,16 @@ class Game {
 
     setupMapController() {
 
-        this.continiousMapController.addFloorTiles('green.', 'bg');
-        this.continiousMapController.addFloorTiles('green.gravel', 'bg');
-        this.continiousMapController.addTile('green.edge', 'bg', true);
-        this.continiousMapController.addTile('green.deep', 'bg', false);
+        this.continiousMapController.addFloorTiles('green.', 'green.bg');
+        this.continiousMapController.addFloorTiles('green.gravel', 'green.bg');
+        this.continiousMapController.addTile('green.edge', 'green.bg', true);
+        this.continiousMapController.addTile('green.deep', 'green.bg', false);
+        this.continiousMapController.addTile('green.rock', 'green.gravelnn', false);
 
         this.continiousMapController.setMap(new continiousMap({x:100, y:100}));
 
         this.background = new ContiniousMapRenderer(document.getElementById("backgroundCanvas"), this.resourceLoadManager.getResource('textures/colony-grounds-ready.png'));
+        this.background.addExtraResoure(this.resourceLoadManager.getResource('textures/colony-other-ready.png'))
         this.continiousMapController.setRenderer(this.background);
 
 
@@ -3091,11 +2816,7 @@ class Game {
 
         this.setupRenderers();
 
-        this.teleportCooldown = new animatedLinearParam(0, 1, 25);
-
-
         this.addRenderer(this.background);
-
 
         let self = this;
         this.uiBblock = new UIRenderer(document.getElementById("TOPUIBlock"), this.resourceLoadManager.getResource('textures/UI/denzi.png'));
@@ -3106,8 +2827,6 @@ class Game {
 
         this.player = new Player(this.toMapSpace({x:10, y:10}));
         this.addActor('player', this.player);
-
-        this.markPortalsAsInteractables();
 
         this.loop.addUpdateMethod(bind(this, 'frame'));
         this.loop.addRenderer(this.actorsRenderer);

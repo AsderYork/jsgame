@@ -4,6 +4,8 @@ class continiousMap {
     tilesExtra = [];
     size = {x:0, y:0};
 
+    actors = [];
+
     fillAll(val) {
         let tiles = [];
         for(let y = 0; y < this.size.y; y++) {
@@ -44,6 +46,25 @@ class continiousMap {
             }
 
         }
+    }
+
+    addActor(actor) {
+        this.actors.push(actor);
+        return actor;
+    }
+
+    removeActor(actor) {
+        for( var i = 0; i < this.actors.length; i++){
+
+            if ( this.actors[i] === actor) {
+                this.actors.splice(i, 1);
+                return;
+            }
+        }
+    }
+
+    getActors() {
+        return this.actors;
     }
 
 
@@ -113,6 +134,10 @@ class ContiniousMapController {
         return this.currentMap ? this.currentMap.getSize() : {x:0, y:0};
     }
 
+    getObjectMapSize() {
+        return vecMul(this.getMapSize(), vecScale(this.resource.gridSize, this.scale));
+    }
+
     getTile(vec) {
         return this.currentMap.getTile(vec);
     }
@@ -145,13 +170,31 @@ class ContiniousMapController {
 
         paintbrush
             .glueGroups('gravel', 'edge')
+            .glueGroups('gravel', 'rock')
             .defineStripeFeature('pit', 'edge', 'deep', 'top', x =>  {return {level: x.level - 1, noterrain:false}; }, x =>  {return {level: x.level - 1, noterrain:false}; })
             .defineStripeFeature('platform', 'edge', 1, 'bottom', undefined, x => {return {level:x.level + 1};})
             .fillTiles({x:0,y:0}, {x:100, y:100}, 'gravel')
             .drawFeature('platform', {x:20, y:14}, {x:26, y:18})
             .fillTiles({x:20,y:18}, {x:26, y:20}, 'gravel')
             .drawFeature('pit', {x:20, y:20}, {x:26, y:26})
+            .fillTiles({x:8,y:8}, {x:13, y:13}, 'rock')
             .render('green');
+
+    }
+
+    addActor(actor) {
+        return this?.currentMap.addActor(actor);
+    }
+
+    getActors() {
+        return this?.currentMap.getActors();
+    }
+
+    removeActor(actor) {
+        return this?.currentMap.removeActor(actor);
+    }
+
+    isPointVisible(vec1, vec2) {
 
     }
 
