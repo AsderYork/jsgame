@@ -170,7 +170,7 @@ function vecModulo(vec, mul) {
 }
 
 function vecApply(vec, predicate) {
-    return {x:predicate(vec.x), y:predicate(vec.y)};
+    return {x:predicate(vec.x, 'x'), y:predicate(vec.y, 'y')};
 }
 
 

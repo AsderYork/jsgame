@@ -58,7 +58,13 @@ class StateMachine {
                 this.currentState = this.states[validTransitions[0]];
             }
 
-            return this.currentState.performBehaviour(item, delta);
+            let currBehaviourResult = this.currentState.performBehaviour(item, delta);
+
+            if(currBehaviourResult !== undefined && currBehaviourResult in this.states) {
+                this.currentState = this.states[currBehaviourResult];
+            }
+
+            return currBehaviourResult;
         }
     }
 
